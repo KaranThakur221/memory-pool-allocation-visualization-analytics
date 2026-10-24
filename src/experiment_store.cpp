@@ -415,6 +415,31 @@ bool ExperimentStore::append(const ExperimentRecord& record, std::string& error)
     return true;
 }
 
+bool ExperimentStore::clear(std::string& error) const {
+    const std::filesystem::path file_path(path_);
+    std::error_code filesystem_error;
+    if (!file_path.parent_path().empty()) {
+        std::filesystem::create_directories(file_path.parent_path(), filesystem_error);
+        if (filesystem_error) {
+            error = "Unable to create experiment history directory: " + filesystem_error.message();
+            return false;
+        }
+    }
+
+    std::ofstream output(file_path, std::ios::binary | std::ios::out | std::ios::trunc);
+    if (!output) {
+        error = "Unable to clear experiment history file: " + path_;
+        return false;
+    }
+    output.write(kFileHeader, sizeof(kFileHeader) - 1);
+    output.flush();
+    if (!output) {
+        error = "Failed to clear experiment history file: " + path_;
+        return false;
+    }
+    return true;
+}
+
 const std::string& ExperimentStore::path() const {
     return path_;
 }

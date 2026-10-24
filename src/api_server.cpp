@@ -127,21 +127,42 @@ std::string extract_json_value(const std::string& json, const std::string& key) 
     return value_end == std::string::npos ? json.substr(value_start) : json.substr(value_start, value_end - value_start);
 }
 
+bool is_unsigned_integer(const std::string& value) {
+    return !value.empty()
+        && std::all_of(value.begin(), value.end(), [](unsigned char character) {
+            return std::isdigit(character) != 0;
+        });
+}
+
+bool is_valid_uint64(const std::string& value) {
+    if (!is_unsigned_integer(value)) {
+        return false;
+    }
+    try {
+        size_t consumed = 0;
+        std::stoull(value, &consumed);
+        return consumed == value.size();
+    } catch (...) {
+        return false;
+    }
+}
+
 size_t extract_json_size(const std::string& json, const std::string& key) {
-    const std::string value = extract_json_value(json, key);
-    if (value.empty()) {
+    const std::string value = trim(extract_json_value(json, key));
+    if (!is_unsigned_integer(value)) {
         return 0;
     }
     try {
-        return static_cast<size_t>(std::stoull(value));
+        const unsigned long long parsed = std::stoull(value);
+        return parsed > std::numeric_limits<size_t>::max() ? 0 : static_cast<size_t>(parsed);
     } catch (...) {
         return 0;
     }
 }
 
 uint64_t extract_json_id(const std::string& json, const std::string& key) {
-    const std::string value = extract_json_value(json, key);
-    if (value.empty()) {
+    const std::string value = trim(extract_json_value(json, key));
+    if (!is_unsigned_integer(value)) {
         return 0;
     }
     try {
@@ -228,6 +249,37 @@ std::vector<WorkloadEntry> parse_workload_csv(const std::string& csv_text) {
 std::vector<ExperimentRecord> g_experiments;
 std::mutex g_experiments_mutex;
 
+struct WorkloadSession {
+    enum class Status { Idle, Running, Paused, Completed, Failed };
+
+    Status status = Status::Idle;
+    std::vector<WorkloadEntry> workload;
+    size_t next_operation = 0;
+    std::string strategy = "first_fit";
+    std::string allocation_mode = "variable_size";
+    size_t fixed_block_size = 0;
+    size_t capacity = 0;
+    std::unique_ptr<MemoryPool> pool;
+    std::unordered_map<uint64_t, void*> active;
+    std::vector<OperationRecord> results;
+    std::vector<std::string> errors;
+    std::string experiment_id;
+};
+
+WorkloadSession g_workload_session;
+std::mutex g_workload_session_mutex;
+
+const char* workload_session_status(WorkloadSession::Status status) {
+    switch (status) {
+        case WorkloadSession::Status::Idle: return "idle";
+        case WorkloadSession::Status::Running: return "running";
+        case WorkloadSession::Status::Paused: return "paused";
+        case WorkloadSession::Status::Completed: return "completed";
+        case WorkloadSession::Status::Failed: return "failed";
+    }
+    return "failed";
+}
+
 std::string experiment_store_path() {
     const char* configured_path = std::getenv("MEMORY_POOL_EXPERIMENTS_PATH");
     return configured_path != nullptr && configured_path[0] != '\0'
@@ -266,6 +318,22 @@ bool is_supported_strategy(const std::string& input) {
         || normalized == "fixed_size" || normalized == "variable_size";
 }
 
+std::string normalize_algorithm_name(const std::string& input) {
+    return to_lower(input) == "best_fit" ? "best_fit" : "first_fit";
+}
+
+std::string normalize_allocation_mode(const std::string& algorithm, const std::string& requested_mode) {
+    return requested_mode.empty()
+        ? (algorithm == "fixed_size" ? "fixed_size" : "variable_size")
+        : to_lower(requested_mode);
+}
+
+MemoryPool::AllocationMode allocation_mode_from_name(const std::string& input) {
+    return to_lower(input) == "fixed_size"
+        ? MemoryPool::AllocationMode::FixedSize
+        : MemoryPool::AllocationMode::VariableSize;
+}
+
 std::string strategy_to_string(MemoryPool::Strategy strategy) {
     switch (strategy) {
         case MemoryPool::Strategy::BestFit: return "best_fit";
@@ -289,6 +357,145 @@ std::string operation_record_to_json(const OperationRecord& record) {
     out << "  \"error_message\": \"" << json_escape(record.error_message) << "\"\n";
     out << "}\n";
     return out.str();
+}
+
+std::string workload_session_json(const WorkloadSession& session) {
+    std::ostringstream out;
+    out << "{\n";
+    out << "  \"status\": \"" << workload_session_status(session.status) << "\",\n";
+    out << "  \"experiment_id\": \"" << json_escape(session.experiment_id) << "\",\n";
+    out << "  \"current_operation\": " << session.next_operation << ",\n";
+    out << "  \"total_operations\": " << session.workload.size() << ",\n";
+    out << "  \"progress\": " << (session.workload.empty() ? 0.0 : static_cast<double>(session.next_operation) / session.workload.size()) * 100.0 << ",\n";
+    out << "  \"configuration\": {\"strategy\": \"" << json_escape(session.strategy)
+        << "\", \"allocation_mode\": \"" << json_escape(session.allocation_mode)
+        << "\", \"fixed_block_size\": " << session.fixed_block_size << "},\n";
+    out << "  \"results\": [";
+    for (size_t i = 0; i < session.results.size(); ++i) {
+        if (i > 0) out << ',';
+        out << operation_record_to_json(session.results[i]);
+    }
+    out << "],\n";
+    out << "  \"state\": " << (session.pool ? session.pool->to_json() : "{}") << "\n";
+    out << "}\n";
+    return out.str();
+}
+
+OperationRecord execute_session_operation(WorkloadSession& session) {
+    const auto& item = session.workload[session.next_operation];
+    const auto start = std::chrono::steady_clock::now();
+    OperationRecord record;
+    record.operation = to_lower(item.operation);
+    record.allocation_id = item.allocation_id;
+    record.requested_size = item.size;
+
+    if (record.operation == "allocate") {
+        if (record.allocation_id == 0) {
+            record.allocation_id = static_cast<uint64_t>(session.results.size() + 1);
+        }
+        void* pointer = session.active.count(record.allocation_id) == 0
+            ? session.pool->allocate(record.requested_size, record.allocation_id)
+            : nullptr;
+        record.success = pointer != nullptr;
+        if (pointer != nullptr) {
+            session.active[record.allocation_id] = pointer;
+            const auto blocks = session.pool->blocks();
+            const auto block = std::find_if(blocks.begin(), blocks.end(), [&record](const AllocationBlock& candidate) {
+                return candidate.allocated && candidate.allocation_id == record.allocation_id;
+            });
+            if (block != blocks.end()) {
+                record.offset = block->offset;
+                record.actual_size = block->size;
+            }
+        } else {
+            record.error_message = session.active.count(record.allocation_id) > 0
+                ? "Allocation id already active"
+                : "Allocation failed";
+        }
+    } else if (record.operation == "free") {
+        const auto allocation = session.active.find(record.allocation_id);
+        if (allocation != session.active.end()) {
+            const auto blocks = session.pool->blocks();
+            const auto block = std::find_if(blocks.begin(), blocks.end(), [&record](const AllocationBlock& candidate) {
+                return candidate.allocated && candidate.allocation_id == record.allocation_id;
+            });
+            if (block != blocks.end()) record.offset = block->offset;
+            record.success = session.pool->deallocate(allocation->second);
+            if (record.success) {
+                session.active.erase(allocation);
+            } else {
+                record.error_message = "Deallocation failed";
+            }
+        } else {
+            record.error_message = "Invalid allocation id";
+        }
+    } else {
+        record.error_message = "Unsupported operation";
+    }
+
+    const auto end = std::chrono::steady_clock::now();
+    record.latency_ms = std::chrono::duration<double, std::milli>(end - start).count();
+    return record;
+}
+
+bool finalize_workload_session(
+    WorkloadSession& session,
+    const ExperimentStore& store,
+    ExperimentRecord& record,
+    std::string& error) {
+    record.experiment_id = session.experiment_id;
+    record.name = "Stepwise workload";
+    record.timestamp = iso_timestamp_now();
+    record.pool_capacity = session.capacity;
+    record.strategy = session.strategy;
+    record.allocation_mode = session.allocation_mode;
+    record.fixed_block_size = session.fixed_block_size;
+    record.workload_configuration = std::to_string(session.workload.size()) + " workload operations";
+    record.operation_sequence = session.results;
+    record.final_memory_state_json = session.pool->to_json();
+    record.random_seed = 0;
+    std::ostringstream signature;
+    double allocation_time = 0.0;
+    double deallocation_time = 0.0;
+    size_t allocation_requests = 0;
+    size_t successful_allocations = 0;
+    size_t deallocation_requests = 0;
+    size_t successful_deallocations = 0;
+    for (const auto& operation : session.results) {
+        signature << operation.operation << ':' << operation.requested_size << ':' << operation.allocation_id << ';';
+        if (operation.operation == "allocate") {
+            ++allocation_requests;
+            allocation_time += operation.latency_ms;
+            if (operation.success) ++successful_allocations;
+        } else {
+            ++deallocation_requests;
+            deallocation_time += operation.latency_ms;
+            if (operation.success) ++successful_deallocations;
+        }
+    }
+    record.workload_signature = signature.str();
+    record.workload_metrics.total_operations = session.results.size();
+    record.workload_metrics.allocation_operations = allocation_requests;
+    record.workload_metrics.deallocation_operations = deallocation_requests;
+    record.workload_metrics.successful_operations = successful_allocations + successful_deallocations;
+    record.workload_metrics.failed_operations = record.workload_metrics.total_operations
+        - record.workload_metrics.successful_operations;
+    record.memory_metrics.total_capacity = session.pool->stats().total_capacity;
+    record.memory_metrics.total_allocated_memory = session.pool->stats().allocated_memory;
+    record.memory_metrics.total_free_memory = session.pool->stats().free_memory;
+    record.memory_metrics.peak_memory_usage = session.pool->stats().peak_memory_usage;
+    record.allocation_metrics.total_requests = allocation_requests;
+    record.allocation_metrics.successful_requests = successful_allocations;
+    record.allocation_metrics.failed_requests = allocation_requests - successful_allocations;
+    record.allocation_metrics.total_time_ms = allocation_time;
+    record.allocation_metrics.average_latency_ms = allocation_requests == 0 ? 0.0 : allocation_time / allocation_requests;
+    record.deallocation_metrics.total_requests = deallocation_requests;
+    record.deallocation_metrics.successful_requests = successful_deallocations;
+    record.deallocation_metrics.failed_requests = deallocation_requests - successful_deallocations;
+    record.deallocation_metrics.total_time_ms = deallocation_time;
+    record.deallocation_metrics.average_latency_ms = deallocation_requests == 0 ? 0.0 : deallocation_time / deallocation_requests;
+    record.benchmark_results = compare_experiments({record});
+    return store.append(record, error);
 }
 
 std::string benchmark_result_to_json(const AlgorithmBenchmarkResult& result) {
@@ -365,6 +572,7 @@ double safe_divide(double numerator, double denominator) {
 
 ExperimentRecord run_workload_experiment(
     const std::string& strategy_name,
+    const std::string& allocation_mode,
     size_t capacity,
     const std::vector<WorkloadEntry>& workload,
     size_t fixed_block_size,
@@ -375,9 +583,9 @@ ExperimentRecord run_workload_experiment(
     record.name = experiment_name.empty() ? "Allocator Experiment " + record.experiment_id : experiment_name;
     record.timestamp = iso_timestamp_now();
     record.pool_capacity = capacity;
-    record.strategy = strategy_name;
-    record.allocation_mode = strategy_name == "fixed_size" ? "fixed_size" : "variable_size";
-    record.fixed_block_size = fixed_block_size;
+    record.strategy = normalize_algorithm_name(strategy_name);
+    record.allocation_mode = allocation_mode;
+    record.fixed_block_size = allocation_mode == "fixed_size" ? fixed_block_size : 0;
     record.random_seed = random_seed;
     record.workload_configuration = std::to_string(workload.size()) + " workload operations";
     std::ostringstream workload_signature;
@@ -386,7 +594,11 @@ ExperimentRecord run_workload_experiment(
     }
     record.workload_signature = workload_signature.str();
 
-    MemoryPool pool(capacity, fixed_block_size, strategy_from_name(strategy_name));
+    MemoryPool pool(
+        capacity,
+        record.fixed_block_size,
+        strategy_from_name(record.strategy),
+        allocation_mode_from_name(allocation_mode));
     std::unordered_map<uint64_t, void*> active;
     std::unordered_map<uint64_t, size_t> active_requested_sizes;
     std::vector<double> allocation_times_ms;
@@ -563,6 +775,7 @@ bool generate_random_workload(
     size_t deallocation_probability,
     uint64_t seed,
     const std::string& strategy_name,
+    const std::string& allocation_mode,
     size_t fixed_block_size,
     std::vector<WorkloadEntry>& workload,
     std::string& error) {
@@ -574,22 +787,25 @@ bool generate_random_workload(
         error = "Invalid random workload configuration; operation count must be 1-10000, sizes must be in range, and probabilities must total 100%.";
         return false;
     }
-    if (!is_supported_strategy(strategy_name)) {
-        error = "Unsupported allocation strategy.";
+    if (strategy_name != "first_fit" && strategy_name != "best_fit") {
+        error = "Allocation algorithm must be first_fit or best_fit.";
         return false;
     }
-    if (strategy_name == "fixed_size"
+    if (allocation_mode != "fixed_size" && allocation_mode != "variable_size") {
+        error = "Allocation mode must be fixed_size or variable_size.";
+        return false;
+    }
+    if (allocation_mode == "fixed_size"
         && (fixed_block_size == 0 || fixed_block_size > capacity || maximum_size > fixed_block_size)) {
         error = "Fixed-size random requests must fit within the configured fixed block.";
         return false;
     }
 
-    MemoryPool probe(capacity, fixed_block_size, strategy_from_name(strategy_name));
     std::mt19937_64 generator(seed);
     std::uniform_int_distribution<size_t> size_distribution(minimum_size, maximum_size);
     std::uniform_int_distribution<size_t> probability_distribution(
         1, allocation_probability + deallocation_probability);
-    std::vector<std::pair<uint64_t, void*>> active;
+    std::vector<uint64_t> active;
     uint64_t next_id = 1;
     workload.clear();
     workload.reserve(operation_count);
@@ -601,18 +817,13 @@ bool generate_random_workload(
             const uint64_t allocation_id = next_id++;
             const size_t requested_size = size_distribution(generator);
             workload.push_back({"allocate", requested_size, allocation_id});
-            void* allocation = probe.allocate(requested_size, allocation_id);
-            if (allocation != nullptr) {
-                active.emplace_back(allocation_id, allocation);
-            }
+            active.push_back(allocation_id);
         } else {
             std::uniform_int_distribution<size_t> active_index(0, active.size() - 1);
             const size_t selected = active_index(generator);
-            const auto [allocation_id, allocation] = active[selected];
+            const uint64_t allocation_id = active[selected];
             workload.push_back({"free", 0, allocation_id});
-            if (probe.deallocate(allocation)) {
-                active.erase(active.begin() + static_cast<std::ptrdiff_t>(selected));
-            }
+            active.erase(active.begin() + static_cast<std::ptrdiff_t>(selected));
         }
     }
     return true;
@@ -752,6 +963,8 @@ std::string experiment_summary_to_json(const ExperimentRecord& record) {
     out << "  \"failed_allocations\": " << record.allocation_metrics.failed_requests << ",\n";
     out << "  \"allocation_success_rate\": " << record.allocation_metrics.success_rate << ",\n";
     out << "  \"allocation_failure_rate\": " << record.allocation_metrics.failure_rate << ",\n";
+    out << "  \"allocated_memory\": " << record.memory_metrics.total_allocated_memory << ",\n";
+    out << "  \"free_memory\": " << record.memory_metrics.total_free_memory << ",\n";
     out << "  \"peak_memory_utilization\": " << record.memory_metrics.peak_memory_utilization << ",\n";
     out << "  \"internal_fragmentation_percent\": " << record.fragmentation.internal_fragmentation_percent << ",\n";
     out << "  \"external_fragmentation_ratio\": " << record.fragmentation.external_fragmentation_ratio << ",\n";
@@ -988,6 +1201,89 @@ int PoolApiServer::run() {
                     response_body = make_json_response(true, "Allocation freed", pool->to_json());
                 }
             }
+        } else if (path == "/api/workload/session/start" && method == "POST") {
+            const std::vector<WorkloadEntry> workload = parse_workload_json(body);
+            const std::string requested_strategy = to_lower(extract_json_value(body, "strategy"));
+            const std::string strategy_name = normalize_algorithm_name(requested_strategy.empty() ? "first_fit" : requested_strategy);
+            const std::string allocation_mode = normalize_allocation_mode(
+                requested_strategy,
+                extract_json_value(body, "allocation_mode"));
+            const size_t fixed_block_size = extract_json_size(body, "fixed_block_size");
+            if (workload.empty()) {
+                response_body = make_json_response(false, "No valid workload operations found", "{}");
+            } else if (!is_supported_strategy(requested_strategy.empty() ? "first_fit" : requested_strategy)
+                || (allocation_mode != "fixed_size" && allocation_mode != "variable_size")
+                || (allocation_mode == "fixed_size" && (fixed_block_size == 0 || fixed_block_size > pool->total_capacity()))) {
+                response_body = make_json_response(false, "Invalid allocation strategy, mode, or fixed block size.", "{}");
+            } else {
+                std::lock_guard<std::mutex> lock(g_workload_session_mutex);
+                g_workload_session = WorkloadSession{};
+                g_workload_session.status = WorkloadSession::Status::Paused;
+                g_workload_session.workload = workload;
+                g_workload_session.strategy = strategy_name;
+                g_workload_session.allocation_mode = allocation_mode;
+                g_workload_session.fixed_block_size = allocation_mode == "fixed_size" ? fixed_block_size : 0;
+                g_workload_session.capacity = pool->total_capacity();
+                g_workload_session.experiment_id = generate_experiment_id();
+                g_workload_session.pool = std::make_unique<MemoryPool>(
+                    g_workload_session.capacity,
+                    g_workload_session.fixed_block_size,
+                    strategy_from_name(strategy_name),
+                    allocation_mode_from_name(allocation_mode));
+                response_body = make_json_response(true, "Workload session started", workload_session_json(g_workload_session));
+            }
+        } else if (path == "/api/workload/session/status" && method == "GET") {
+            std::lock_guard<std::mutex> lock(g_workload_session_mutex);
+            response_body = make_json_response(true, "Workload session status", workload_session_json(g_workload_session));
+        } else if (path == "/api/workload/session/pause" && method == "POST") {
+            std::lock_guard<std::mutex> lock(g_workload_session_mutex);
+            if (g_workload_session.status == WorkloadSession::Status::Running) {
+                g_workload_session.status = WorkloadSession::Status::Paused;
+                response_body = make_json_response(true, "Workload paused", workload_session_json(g_workload_session));
+            } else {
+                response_body = make_json_response(false, "Only a running workload can be paused.", workload_session_json(g_workload_session));
+            }
+        } else if (path == "/api/workload/session/resume" && method == "POST") {
+            std::lock_guard<std::mutex> lock(g_workload_session_mutex);
+            if (g_workload_session.status == WorkloadSession::Status::Paused) {
+                g_workload_session.status = WorkloadSession::Status::Running;
+                response_body = make_json_response(true, "Workload resumed", workload_session_json(g_workload_session));
+            } else {
+                response_body = make_json_response(false, "Only a paused workload can resume.", workload_session_json(g_workload_session));
+            }
+        } else if (path == "/api/workload/session/step" && method == "POST") {
+            std::lock_guard<std::mutex> lock(g_workload_session_mutex);
+            if (!g_workload_session.pool || g_workload_session.next_operation >= g_workload_session.workload.size()) {
+                response_body = make_json_response(false, "No active workload session.", workload_session_json(g_workload_session));
+            } else if (g_workload_session.status != WorkloadSession::Status::Paused
+                && g_workload_session.status != WorkloadSession::Status::Running) {
+                response_body = make_json_response(false, "Workload is not ready for a step.", workload_session_json(g_workload_session));
+            } else {
+                g_workload_session.status = WorkloadSession::Status::Running;
+                g_workload_session.results.push_back(execute_session_operation(g_workload_session));
+                ++g_workload_session.next_operation;
+                if (g_workload_session.next_operation == g_workload_session.workload.size()) {
+                    ExperimentRecord completed;
+                    if (!finalize_workload_session(g_workload_session, experiment_store, completed, store_error)) {
+                        g_workload_session.status = WorkloadSession::Status::Failed;
+                        response_body = make_json_response(false, "Workload completed but could not be saved: " + store_error, workload_session_json(g_workload_session));
+                    } else {
+                        {
+                            std::lock_guard<std::mutex> history_lock(g_experiments_mutex);
+                            g_experiments.push_back(completed);
+                        }
+                        g_workload_session.status = WorkloadSession::Status::Completed;
+                        response_body = make_json_response(true, "Workload completed and saved", workload_session_json(g_workload_session));
+                    }
+                } else {
+                    g_workload_session.status = WorkloadSession::Status::Paused;
+                    response_body = make_json_response(true, "Workload operation completed", workload_session_json(g_workload_session));
+                }
+            }
+        } else if (path == "/api/workload/session/reset" && method == "POST") {
+            std::lock_guard<std::mutex> lock(g_workload_session_mutex);
+            g_workload_session = WorkloadSession{};
+            response_body = make_json_response(true, "Workload session reset", workload_session_json(g_workload_session));
         } else if (path == "/api/workload/execute" && method == "POST") {
             const std::vector<WorkloadEntry> workload = parse_workload(body);
             if (workload.empty()) {
@@ -1001,17 +1297,30 @@ int PoolApiServer::run() {
                 response_message = "Workloads may contain only allocate and free operations.";
                 response_body = make_json_response(false, response_message, "{}");
             } else {
-                const std::string strategy_name = to_lower(extract_json_value(body, "strategy").empty()
+                const std::string requested_strategy = to_lower(extract_json_value(body, "strategy").empty()
                     ? "first_fit"
                     : extract_json_value(body, "strategy"));
-                const size_t fixed_block_size = extract_json_size(body, "fixed_block_size") == 0 ? 64 : extract_json_size(body, "fixed_block_size");
-                if (!is_supported_strategy(strategy_name)
-                    || (strategy_name == "fixed_size" && fixed_block_size > pool->total_capacity())) {
+                const std::string strategy_name = normalize_algorithm_name(requested_strategy);
+                const std::string allocation_mode = normalize_allocation_mode(
+                    requested_strategy,
+                    extract_json_value(body, "allocation_mode"));
+                const size_t fixed_block_size = extract_json_size(body, "fixed_block_size");
+                if (!is_supported_strategy(requested_strategy)
+                    || (allocation_mode != "fixed_size" && allocation_mode != "variable_size")
+                    || (allocation_mode == "fixed_size"
+                        && (fixed_block_size == 0 || fixed_block_size > pool->total_capacity()))) {
                     success = false;
                     response_message = "Invalid allocation strategy or fixed block size.";
                     response_body = make_json_response(false, response_message, "{}");
                 } else {
-                    ExperimentRecord experiment = run_workload_experiment(strategy_name, pool->total_capacity(), workload, fixed_block_size, extract_json_id(body, "random_seed"), "workload_experiment");
+                    ExperimentRecord experiment = run_workload_experiment(
+                        strategy_name,
+                        allocation_mode,
+                        pool->total_capacity(),
+                        workload,
+                        fixed_block_size,
+                        extract_json_id(body, "random_seed"),
+                        "workload_experiment");
                     const bool persisted = persist_experiment(experiment_store, experiment, store_error);
                     if (!persisted) {
                         success = false;
@@ -1021,6 +1330,9 @@ int PoolApiServer::run() {
                         std::ostringstream payload;
                         payload << "{\n";
                         payload << "  \"experiment_id\": \"" << json_escape(experiment.experiment_id) << "\",\n";
+                        payload << "  \"configuration\": {\"strategy\": \"" << json_escape(experiment.strategy)
+                            << "\", \"allocation_mode\": \"" << json_escape(experiment.allocation_mode)
+                            << "\", \"fixed_block_size\": " << experiment.fixed_block_size << "},\n";
                         payload << "  \"results\": [\n";
                         for (size_t i = 0; i < experiment.operation_sequence.size(); ++i) {
                             payload << operation_record_to_json(experiment.operation_sequence[i]);
@@ -1049,12 +1361,16 @@ int PoolApiServer::run() {
             const size_t allocation_probability = extract_json_size(body, "allocation_probability");
             const size_t deallocation_probability = extract_json_size(body, "deallocation_probability");
             const uint64_t random_seed = extract_json_id(body, "random_seed");
+            const bool valid_seed = is_valid_uint64(trim(extract_json_value(body, "random_seed")));
             const std::string strategy_name = to_lower(extract_json_value(body, "strategy"));
-            const size_t fixed_block_size = extract_json_size(body, "fixed_block_size") == 0
-                ? 64
-                : extract_json_size(body, "fixed_block_size");
+            const std::string allocation_mode = to_lower(extract_json_value(body, "allocation_mode"));
+            const size_t fixed_block_size = extract_json_size(body, "fixed_block_size");
             std::vector<WorkloadEntry> workload;
-            if (!generate_random_workload(
+            if (!valid_seed) {
+                success = false;
+                response_message = "Random seed must be provided as a non-negative integer.";
+                response_body = make_json_response(false, response_message, "{}");
+            } else if (!generate_random_workload(
                     pool->total_capacity(),
                     operation_count,
                     minimum_size,
@@ -1063,6 +1379,7 @@ int PoolApiServer::run() {
                     deallocation_probability,
                     random_seed,
                     strategy_name,
+                    allocation_mode,
                     fixed_block_size,
                     workload,
                     response_message)) {
@@ -1071,11 +1388,19 @@ int PoolApiServer::run() {
             } else {
                 ExperimentRecord experiment = run_workload_experiment(
                     strategy_name,
+                    allocation_mode,
                     pool->total_capacity(),
                     workload,
                     fixed_block_size,
                     random_seed,
                     "Seeded random workload");
+                experiment.workload_configuration =
+                    "Seeded random: operations=" + std::to_string(operation_count)
+                    + ", minimum_size_bytes=" + std::to_string(minimum_size)
+                    + ", maximum_size_bytes=" + std::to_string(maximum_size)
+                    + ", allocation_probability_percent=" + std::to_string(allocation_probability)
+                    + ", deallocation_probability_percent=" + std::to_string(deallocation_probability);
+                experiment.benchmark_results = compare_experiments({experiment});
                 if (!persist_experiment(experiment_store, experiment, store_error)) {
                     success = false;
                     response_message = "Random workload executed but experiment could not be saved: " + store_error;
@@ -1084,12 +1409,27 @@ int PoolApiServer::run() {
                     std::ostringstream payload;
                     payload << "{\n";
                     payload << "  \"experiment_id\": \"" << json_escape(experiment.experiment_id) << "\",\n";
+                    payload << "  \"configuration\": {\"strategy\": \"" << json_escape(experiment.strategy)
+                        << "\", \"allocation_mode\": \"" << json_escape(experiment.allocation_mode)
+                        << "\", \"fixed_block_size\": " << experiment.fixed_block_size
+                        << ", \"operation_count\": " << operation_count
+                        << ", \"minimum_size\": " << minimum_size
+                        << ", \"maximum_size\": " << maximum_size
+                        << ", \"allocation_probability\": " << allocation_probability
+                        << ", \"deallocation_probability\": " << deallocation_probability
+                        << ", \"random_seed\": " << random_seed << "},\n";
                     payload << "  \"results\": [\n";
                     for (size_t i = 0; i < experiment.operation_sequence.size(); ++i) {
                         payload << operation_record_to_json(experiment.operation_sequence[i]);
                         if (i + 1 < experiment.operation_sequence.size()) payload << ",\n";
                     }
                     payload << "\n  ],\n";
+                    payload << "  \"benchmark_results\": [";
+                    for (size_t i = 0; i < experiment.benchmark_results.size(); ++i) {
+                        if (i > 0) payload << ",";
+                        payload << benchmark_result_to_json(experiment.benchmark_results[i]);
+                    }
+                    payload << "],\n";
                     payload << "  \"state\": " << experiment.final_memory_state_json << "\n";
                     payload << "}\n";
                     response_message = "Seeded random workload executed and saved";
@@ -1166,6 +1506,7 @@ int PoolApiServer::run() {
                 for (auto& comparison : comparisons) {
                     ExperimentRecord experiment = run_workload_experiment(
                         comparison.strategy,
+                        comparison.strategy == "fixed_size" ? "fixed_size" : "variable_size",
                         capacity,
                         benchmark_workload,
                         fixed_block_size,
@@ -1199,6 +1540,16 @@ int PoolApiServer::run() {
                     payload << "}\n";
                     response_body = make_json_response(true, "Benchmark results saved to experiment history", payload.str());
                 }
+            }
+        } else if (path == "/api/experiments" && method == "DELETE") {
+            ExperimentStore experiment_store(experiment_store_path());
+            std::string store_error;
+            std::lock_guard<std::mutex> lock(g_experiments_mutex);
+            if (!experiment_store.clear(store_error)) {
+                response_body = make_json_response(false, "Unable to clear experiment history: " + store_error, "{}");
+            } else {
+                g_experiments.clear();
+                response_body = make_json_response(true, "Experiment history cleared", "{\"experiments\": []}");
             }
         } else if (path == "/api/experiments" && method == "GET") {
             std::lock_guard<std::mutex> lock(g_experiments_mutex);
@@ -1313,6 +1664,10 @@ int PoolApiServer::run() {
                     if (current.workload_signature != baseline.workload_signature) {
                         same_conditions = false;
                         condition_differences.push_back("Workload operation sequences differ");
+                    }
+                    if (current.workload_configuration != baseline.workload_configuration) {
+                        same_conditions = false;
+                        condition_differences.push_back("Workload settings differ");
                     }
                     if (current.random_seed != baseline.random_seed) {
                         same_conditions = false;

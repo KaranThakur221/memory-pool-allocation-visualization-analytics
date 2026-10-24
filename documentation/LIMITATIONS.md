@@ -47,8 +47,10 @@
   updates, and explicit `fsync` durability are not provided. A corrupt or
   truncated history file stops startup with an error and requires manual
   recovery from a backup.
-- Workload execution is synchronous. Step, pause, and resume endpoints are
-  not implemented.
+- The original workload endpoint remains synchronous, while the dashboard also
+  provides a backend-owned stepwise session. Step, pause, resume, and reset are
+  process-local and support one active session; Resume changes state but the
+  client advances operations explicitly with Step.
 - AI-agent orchestration and an agent execution dashboard are not integrated.
   The frontend does not fabricate agent runs.
 - Pool initialization is capped at 64 MiB and generated random workloads at

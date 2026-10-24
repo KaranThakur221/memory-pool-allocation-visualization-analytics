@@ -6,12 +6,25 @@
 #include <sstream>
 
 MemoryPool::MemoryPool(size_t capacity, size_t block_size, Strategy strategy)
-    : capacity_(capacity), block_size_(block_size), strategy_(strategy) {
+    : capacity_(capacity),
+      block_size_(block_size),
+      strategy_(strategy),
+      allocation_mode_(strategy == Strategy::FixedSize
+          ? AllocationMode::FixedSize
+          : AllocationMode::VariableSize) {
+    initialize();
+}
+
+MemoryPool::MemoryPool(size_t capacity, size_t block_size, Strategy strategy, AllocationMode allocation_mode)
+    : capacity_(capacity),
+      block_size_(block_size),
+      strategy_(strategy),
+      allocation_mode_(allocation_mode) {
     initialize();
 }
 
 bool MemoryPool::initialize() {
-    if (capacity_ == 0 || (strategy_ == Strategy::FixedSize && block_size_ == 0)) {
+    if (capacity_ == 0 || (allocation_mode_ == AllocationMode::FixedSize && block_size_ == 0)) {
         return false;
     }
 
@@ -134,13 +147,13 @@ void* MemoryPool::allocate(size_t requested_size, uint64_t allocation_id) {
     }
 
     const size_t original_requested_size = requested_size;
-    if (strategy_ == Strategy::FixedSize && requested_size > block_size_) {
+    if (allocation_mode_ == AllocationMode::FixedSize && requested_size > block_size_) {
         ++failed_allocations_;
         ++contiguous_memory_failures_;
         return nullptr;
     }
 
-    size_t aligned_size = strategy_ == Strategy::FixedSize ? block_size_ : requested_size;
+    size_t aligned_size = allocation_mode_ == AllocationMode::FixedSize ? block_size_ : requested_size;
     if (aligned_size % 8 != 0) {
         if (aligned_size > std::numeric_limits<size_t>::max() - 7) {
             ++failed_allocations_;
@@ -327,6 +340,10 @@ MemoryPool::Strategy MemoryPool::strategy() const {
     return strategy_;
 }
 
+MemoryPool::AllocationMode MemoryPool::allocation_mode() const {
+    return allocation_mode_;
+}
+
 size_t MemoryPool::block_size() const {
     return block_size_;
 }
@@ -344,6 +361,8 @@ std::string MemoryPool::to_json() const {
         case Strategy::VariableSize: out << "variable_size"; break;
     }
     out << "\",\n";
+    out << "  \"allocation_mode\": \""
+        << (allocation_mode_ == AllocationMode::FixedSize ? "fixed_size" : "variable_size") << "\",\n";
     out << "  \"blocks\": [\n";
     for (size_t i = 0; i < blocks_.size(); ++i) {
         const auto& block = blocks_[i];

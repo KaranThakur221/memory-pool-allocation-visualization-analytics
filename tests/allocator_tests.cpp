@@ -108,6 +108,22 @@ int main() {
     }
 
     {
+        MemoryPool best_fit_fixed(
+            512,
+            64,
+            MemoryPool::Strategy::BestFit,
+            MemoryPool::AllocationMode::FixedSize);
+        assert(best_fit_fixed.strategy() == MemoryPool::Strategy::BestFit);
+        assert(best_fit_fixed.allocation_mode() == MemoryPool::AllocationMode::FixedSize);
+        void* allocation = best_fit_fixed.allocate(37, 1);
+        assert(allocation != nullptr);
+        const auto stats = best_fit_fixed.stats();
+        assert(stats.requested_memory == 37);
+        assert(stats.allocated_memory == 64);
+        assert(stats.internal_fragmentation == 27.0);
+    }
+
+    {
         const BenchmarkResult fixed = benchmark_pool(
             256, {37, 65}, MemoryPool::Strategy::FixedSize, 1, 64);
         assert(fixed.sample_count == 2);
@@ -382,7 +398,7 @@ int main() {
         original.timestamp = "2026-10-24T12:00:00Z";
         original.pool_capacity = 4096;
         original.strategy = "best_fit";
-        original.allocation_mode = "variable_size";
+        original.allocation_mode = "fixed_size";
         original.fixed_block_size = 64;
         original.workload_configuration = "2 operations";
         original.workload_signature = "allocate:37:0;free:0:1;";
@@ -443,6 +459,8 @@ int main() {
         assert(record.timestamp == original.timestamp);
         assert(record.pool_capacity == original.pool_capacity);
         assert(record.strategy == original.strategy);
+        assert(record.allocation_mode == original.allocation_mode);
+        assert(record.fixed_block_size == original.fixed_block_size);
         assert(record.workload_signature == original.workload_signature);
         assert(record.random_seed == original.random_seed);
         assert(record.operation_sequence.size() == 2);
@@ -456,6 +474,12 @@ int main() {
         assert(record.benchmark_results[0].execution_time_ms == 0.375);
         assert(record.final_memory_state_json == original.final_memory_state_json);
         assert(record.errors == original.errors);
+        assert(store.clear(error));
+        assert(error.empty());
+        restored.clear();
+        assert(store.load(restored, error));
+        assert(error.empty());
+        assert(restored.empty());
         std::filesystem::remove(storage_path, cleanup_error);
     }
 

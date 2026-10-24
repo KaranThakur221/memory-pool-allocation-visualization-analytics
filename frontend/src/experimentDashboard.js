@@ -4,6 +4,7 @@ export const COMPARISON_METRICS = [
   { key: 'execution_time_ms', label: 'Execution time', unit: 'ms', lowerIsBetter: true },
   { key: 'total_allocation_time_ms', label: 'Total allocation time', unit: 'ms', lowerIsBetter: true },
   { key: 'average_allocation_latency_ms', label: 'Avg allocation latency', unit: 'ms', lowerIsBetter: true },
+  { key: 'median_allocation_latency_ms', label: 'Median allocation latency', unit: 'ms', lowerIsBetter: true },
   { key: 'maximum_allocation_latency_ms', label: 'Max allocation latency', unit: 'ms', lowerIsBetter: true },
   { key: 'p95_allocation_latency_ms', label: 'P95 allocation latency', unit: 'ms', lowerIsBetter: true },
   { key: 'p99_allocation_latency_ms', label: 'P99 allocation latency', unit: 'ms', lowerIsBetter: true },
@@ -29,6 +30,33 @@ export const COMPARISON_METRICS = [
   { key: 'coalescing_operations', label: 'Coalescing operations', unit: 'operations', lowerIsBetter: null },
 ];
 
+export const WORKLOAD_GRAPH_GROUPS = [
+  {
+    key: 'allocation-performance',
+    title: 'Allocation performance',
+    metrics: ['total_allocation_time_ms', 'average_allocation_latency_ms', 'median_allocation_latency_ms', 'p95_allocation_latency_ms', 'p99_allocation_latency_ms'],
+  },
+  {
+    key: 'memory-utilization',
+    title: 'Memory utilization',
+    metrics: ['pool_capacity', 'allocated_memory', 'free_memory', 'peak_memory_utilization'],
+  },
+  {
+    key: 'fragmentation',
+    title: 'Fragmentation',
+    metrics: ['internal_fragmentation', 'external_fragmentation', 'largest_free_block', 'free_block_count'],
+  },
+  {
+    key: 'allocation-success',
+    title: 'Allocation success',
+    metrics: ['successful_allocations', 'failed_allocations', 'allocation_success_rate', 'allocation_failure_rate'],
+  },
+];
+
+export function getComparisonMetric(key) {
+  return COMPARISON_METRICS.find((metric) => metric.key === key) ?? null;
+}
+
 export function toggleComparisonSelection(selectedIds, experimentId, limit = MAX_COMPARISON_EXPERIMENTS) {
   if (selectedIds.includes(experimentId)) {
     return selectedIds.filter((id) => id !== experimentId);
@@ -51,6 +79,7 @@ export function getConditionDifferences(experiments) {
     if (experiment.allocation_mode !== baseline.allocation_mode) differences.add('Allocation modes differ');
     if (experiment.fixed_block_size !== baseline.fixed_block_size) differences.add('Fixed block sizes differ');
     if (experiment.workload_signature !== baseline.workload_signature) differences.add('Workload operation sequences differ');
+    if (experiment.workload_configuration !== baseline.workload_configuration) differences.add('Workload settings differ');
     if (experiment.random_seed !== baseline.random_seed) differences.add('Random seeds differ');
   }
   return [...differences];

@@ -50,7 +50,13 @@ public:
         VariableSize
     };
 
+    enum class AllocationMode {
+        FixedSize,
+        VariableSize
+    };
+
     MemoryPool(size_t capacity = 1024 * 1024, size_t block_size = 64, Strategy strategy = Strategy::FirstFit);
+    MemoryPool(size_t capacity, size_t block_size, Strategy strategy, AllocationMode allocation_mode);
     ~MemoryPool() = default;
 
     bool initialize();
@@ -70,6 +76,7 @@ public:
     std::string to_json() const;
 
     Strategy strategy() const;
+    AllocationMode allocation_mode() const;
     size_t block_size() const;
 
 private:
@@ -85,6 +92,7 @@ private:
     size_t capacity_ = 0;
     size_t block_size_ = 64;
     Strategy strategy_ = Strategy::FirstFit;
+    AllocationMode allocation_mode_ = AllocationMode::VariableSize;
     uint64_t next_allocation_id_ = 1;
     uint64_t next_block_id_ = 1;
     size_t successful_allocations_ = 0;

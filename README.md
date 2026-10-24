@@ -89,6 +89,12 @@ backend process and is not a multi-process database.
 The API supports pool initialization/configuration, manual allocation and
 deallocation, custom workload execution, seeded random workload generation,
 benchmark comparisons, experiment history/detail/comparison, and CSV export.
+The seeded workload editor independently selects First-Fit or Best-Fit and
+fixed-size or variable-size allocation. Fixed-size mode requires a block size
+at least as large as the configured maximum request. The backend records the
+actual algorithm, mode, block size, seed, and workload settings with the
+experiment; matching seeds/settings produce the same operation sequence
+across compatible allocation configurations.
 Pool capacity is limited to 64 MiB by the initialization endpoint; random
 workloads are limited to 10,000 operations.
 Experiment detail supports CSV downloads for complete results, operation
@@ -103,6 +109,8 @@ from the workload editor; imports larger than 1 MiB are rejected.
 See [DEVELOPMENT_LOG.md](./DEVELOPMENT_LOG.md) for timestamped, evidence-based
 audit progress and [documentation/LIMITATIONS.md](./documentation/LIMITATIONS.md)
 for verified limitations. Workload execution currently runs an entire
-sequence; step/pause/resume controls and an AI-agent orchestration dashboard
-are not implemented. The security and memory-safety test coverage is not a
-substitute for a configured AI agent or an external security assessment.
+sequence through the original endpoint, and the dashboard also provides
+backend-owned step/pause/resume/reset controls for one process-local session.
+An AI-agent orchestration dashboard is not implemented. The security and
+memory-safety test coverage is not a substitute for a configured AI agent or
+an external security assessment.

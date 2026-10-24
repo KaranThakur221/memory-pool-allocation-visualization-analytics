@@ -16,8 +16,8 @@
 | React dashboard | `frontend/src/*.jsx` | Implemented | React/Vite | Tests/build passed; browser exercised with live backend |
 | Persistent experiment history | `src/experiment_store.cpp`, API | Implemented | Local filesystem | Round-trip, API, and backend restart verified |
 | Configurable pool initialization | `POST /api/pool/initialize`, dashboard | Implemented | `MemoryPool` | Valid/invalid config and fixed-block state live-tested |
-| Seeded random workloads | `POST /api/workload/random`, dashboard | Implemented | `MemoryPool` | Reproducibility and valid frees live-tested |
-| Step/pause/resume workload controls | API and dashboard | Not implemented | — | Not tested |
+| Seeded random workloads | `POST /api/workload/random`, dashboard | Implemented with independent algorithm/mode selection | `MemoryPool` | UI payload/configuration tests added; C++ build/live API verification pending |
+| Step/pause/resume workload controls | API and dashboard | Implemented (single active process-local session) | `src/api_server.cpp`, `frontend/src/App.jsx` | Runtime verified; CTest 1/1; frontend 16/16 |
 | AI-agent orchestration/dashboard | UI and backend | Not implemented | Agent runtime unavailable | Not tested |
 | Sanitizer validation | CMake instrumented build | Implemented for tests | ASan/UBSan | CTest passed with both sanitizers; Valgrind unavailable |
 | Workload CSV validation/import | `frontend/src/workloadCsv.js`, editor | Implemented in supported UI import path | Browser File API | 7 focused parser tests; 1 MiB cap |

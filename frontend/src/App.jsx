@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   COMPARISON_METRICS,
+  WORKLOAD_GRAPH_GROUPS,
   formatMetricValue,
+  getComparisonMetric,
   getConditionDifferences,
   getMetricDelta,
   toggleComparisonSelection,
@@ -12,6 +14,10 @@ import {
   WORKLOAD_CSV_TEMPLATE,
   workloadToCsv,
 } from './workloadCsv.js';
+import {
+  createRandomWorkloadRequest,
+  validateRandomWorkloadConfiguration,
+} from './randomWorkload.js';
 
 const SAMPLE_WORKLOAD = [
   { operation: 'allocate', size: 64 },
@@ -63,14 +69,20 @@ function App() {
   const [randomAllocationProbability, setRandomAllocationProbability] = useState(70);
   const [randomDeallocationProbability, setRandomDeallocationProbability] = useState(30);
   const [randomSeed, setRandomSeed] = useState(42);
+  const [randomStrategy, setRandomStrategy] = useState('first_fit');
+  const [randomAllocationMode, setRandomAllocationMode] = useState('variable_size');
+  const [randomFixedBlockSize, setRandomFixedBlockSize] = useState(256);
+  const [randomExecutionConfiguration, setRandomExecutionConfiguration] = useState(null);
   const [statusMessage, setStatusMessage] = useState('Connecting to allocator…');
   const [poolError, setPoolError] = useState('');
   const [loadingPool, setLoadingPool] = useState(true);
   const [loading, setLoading] = useState(false);
   const [loadingExperiments, setLoadingExperiments] = useState(false);
+  const [clearingExperiments, setClearingExperiments] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [loadingComparison, setLoadingComparison] = useState(false);
   const [workloadResults, setWorkloadResults] = useState([]);
+  const [workloadSession, setWorkloadSession] = useState(null);
   const [benchmarkResults, setBenchmarkResults] = useState([]);
   const [experiments, setExperiments] = useState([]);
   const [selectedExperimentId, setSelectedExperimentId] = useState('');
@@ -83,7 +95,27 @@ function App() {
   const [comparisonError, setComparisonError] = useState('');
   const [comparisonConditionsMatch, setComparisonConditionsMatch] = useState(null);
   const [comparisonConditionDifferences, setComparisonConditionDifferences] = useState([]);
+  const [comparisonCsv, setComparisonCsv] = useState('');
+  const [graphType, setGraphType] = useState('bar');
+  const [graphMetric, setGraphMetric] = useState('average_allocation_latency_ms');
+  const [showGraphLegend, setShowGraphLegend] = useState(true);
+  const [showGraphValues, setShowGraphValues] = useState(true);
   const configurationInitialized = useRef(false);
+  const randomWorkloadConfiguration = {
+    operation_count: randomOperationCount,
+    minimum_size: randomMinimumSize,
+    maximum_size: randomMaximumSize,
+    allocation_probability: randomAllocationProbability,
+    deallocation_probability: randomDeallocationProbability,
+    random_seed: randomSeed,
+    strategy: randomStrategy,
+    allocation_mode: randomAllocationMode,
+    fixed_block_size: randomFixedBlockSize,
+  };
+  const randomWorkloadError = validateRandomWorkloadConfiguration(
+    randomWorkloadConfiguration,
+    poolData?.capacity ?? poolCapacity,
+  );
 
   const loadPool = async () => {
     setLoadingPool(true);
@@ -117,6 +149,26 @@ function App() {
     }
   };
 
+  const handleClearComparison = () => {
+    setCompareIds([]);
+    setComparisonResults([]);
+    setComparisonCsv('');
+    setComparisonConditionsMatch(null);
+    setComparisonConditionDifferences([]);
+    setComparisonError('');
+  };
+
+  const handleExportComparison = () => {
+    if (!comparisonCsv) return;
+    const url = URL.createObjectURL(new Blob([comparisonCsv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'experiment-comparison.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+    setStatusMessage('Experiment comparison CSV exported.');
+  };
+
   const loadExperiments = async () => {
     setLoadingExperiments(true);
     setHistoryError('');
@@ -135,6 +187,36 @@ function App() {
       setHistoryError('Unable to load experiment history.');
     } finally {
       setLoadingExperiments(false);
+    }
+  };
+
+  const handleClearExperiments = async () => {
+    if (experiments.length === 0 || clearingExperiments) return;
+    if (!window.confirm(`Clear all ${experiments.length} saved experiments? This cannot be undone.`)) {
+      return;
+    }
+
+    setClearingExperiments(true);
+    setHistoryError('');
+    try {
+      const response = await fetch('/api/experiments', { method: 'DELETE' });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || 'Unable to clear experiment history.');
+      }
+      setExperiments([]);
+      setSelectedExperimentId('');
+      setExperimentDetail(null);
+      setCompareIds([]);
+      setComparisonResults([]);
+      setComparisonCsv('');
+      setComparisonConditionsMatch(null);
+      setComparisonConditionDifferences([]);
+      setStatusMessage(result.message || 'Experiment history cleared.');
+    } catch (error) {
+      setHistoryError(error.message || 'Unable to clear experiment history.');
+    } finally {
+      setClearingExperiments(false);
     }
   };
 
@@ -265,29 +347,73 @@ function App() {
     }
   };
 
+  const requestWorkloadSession = async (path, body = {}) => {
+    try {
+      const response = await fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || 'Workload session request failed.');
+      }
+      const session = result.payload ?? {};
+      setWorkloadSession(session);
+      if (Array.isArray(session.results)) setWorkloadResults(session.results);
+      if (session.state) setPoolData(session.state);
+      setStatusMessage(result.message || 'Workload session updated.');
+      return session;
+    } catch (error) {
+      setStatusMessage(error.message || 'Workload session request failed.');
+      return null;
+    }
+  };
+
+  const handleStartWorkloadSession = async () => {
+    let parsed;
+    try {
+      parsed = parseWorkloadText(workloadText);
+    } catch (error) {
+      setStatusMessage(error.message || 'Workload is invalid.');
+      return;
+    }
+    await requestWorkloadSession('/api/workload/session/start', {
+      strategy: poolData?.pool_strategy ?? 'first_fit',
+      allocation_mode: poolData?.allocation_mode ?? 'variable_size',
+      fixed_block_size: poolData?.block_size ?? 64,
+      workload: parsed,
+    });
+  };
+
+  const handleWorkloadStep = () => requestWorkloadSession('/api/workload/session/step');
+  const handleWorkloadPause = () => requestWorkloadSession('/api/workload/session/pause');
+  const handleWorkloadResume = () => requestWorkloadSession('/api/workload/session/resume');
+  const handleWorkloadReset = () => {
+    if (window.confirm('Reset the active workload session? Saved experiment history will not be deleted.')) {
+      requestWorkloadSession('/api/workload/session/reset');
+    }
+  };
+
   const handleRunRandomWorkload = async () => {
     if (!poolData) return;
+    if (randomWorkloadError) {
+      setStatusMessage(randomWorkloadError);
+      return;
+    }
     setLoading(true);
     try {
       const response = await fetch('/api/workload/random', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          operation_count: Number(randomOperationCount),
-          minimum_size: Number(randomMinimumSize),
-          maximum_size: Number(randomMaximumSize),
-          allocation_probability: Number(randomAllocationProbability),
-          deallocation_probability: Number(randomDeallocationProbability),
-          random_seed: Number(randomSeed),
-          strategy: poolData.pool_strategy,
-          fixed_block_size: poolData.block_size,
-        }),
+        body: JSON.stringify(createRandomWorkloadRequest(randomWorkloadConfiguration)),
       });
       const result = await response.json();
       if (!response.ok || !result.success) {
         throw new Error(result.message || 'Random workload failed.');
       }
       const payload = result.payload ?? {};
+      setRandomExecutionConfiguration(payload.configuration ?? null);
       const operationResults = Array.isArray(payload.results) ? payload.results : [];
       setWorkloadResults(operationResults);
       if (payload.state) setPoolData(payload.state);
@@ -406,11 +532,56 @@ function App() {
     }
   };
 
+  const requestComparison = async (ids) => {
+    if (ids.length < 2) {
+      setComparisonResults([]);
+      setComparisonCsv('');
+      setComparisonConditionsMatch(null);
+      setComparisonConditionDifferences([]);
+      return;
+    }
+    setLoadingComparison(true);
+    setComparisonError('');
+    try {
+      const response = await fetch('/api/experiments/compare', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ experiment_ids: ids }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || 'Unable to compare experiments.');
+      }
+      const rows = Array.isArray(result?.payload?.comparison) ? result.payload.comparison : [];
+      const selectedById = new Map(experiments.map((experiment) => [experiment.experiment_id, experiment]));
+      setComparisonResults(rows.map((row) => {
+        const saved = selectedById.get(row.experiment_id);
+        return {
+          ...row,
+          pool_capacity: saved?.pool_capacity,
+          allocated_memory: saved?.allocated_memory,
+          free_memory: saved?.free_memory,
+        };
+      }));
+      setComparisonCsv(typeof result?.payload?.csv === 'string' ? result.payload.csv : '');
+      setComparisonConditionsMatch(result?.payload?.same_conditions ?? null);
+      setComparisonConditionDifferences(Array.isArray(result?.payload?.condition_differences) ? result.payload.condition_differences : []);
+      setStatusMessage(rows.length > 0 ? 'Experiment comparison refreshed.' : 'No comparable experiments available.');
+    } catch (error) {
+      setComparisonError(error.message || 'Unable to compare experiments.');
+    } finally {
+      setLoadingComparison(false);
+    }
+  };
+
   const handleToggleCompare = (experimentId) => {
-    setCompareIds((current) => toggleComparisonSelection(current, experimentId));
+    const nextIds = toggleComparisonSelection(compareIds, experimentId);
+    setCompareIds(nextIds);
     setComparisonResults([]);
+    setComparisonCsv('');
     setComparisonConditionsMatch(null);
     setComparisonConditionDifferences([]);
+    if (nextIds.length >= 2) requestComparison(nextIds);
   };
 
   const handleCompareSelected = async () => {
@@ -418,29 +589,12 @@ function App() {
       setComparisonError('Select at least two experiments to compare.');
       return;
     }
+    await requestComparison(compareIds);
+  };
 
-    setLoadingComparison(true);
-    setComparisonError('');
-    try {
-      const response = await fetch('/api/experiments/compare', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ experiment_ids: compareIds }),
-      });
-      const result = await response.json();
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || 'Unable to compare experiments.');
-      }
-      const rows = Array.isArray(result?.payload?.comparison) ? result.payload.comparison : [];
-      setComparisonResults(rows);
-      setComparisonConditionsMatch(result?.payload?.same_conditions ?? null);
-      setComparisonConditionDifferences(Array.isArray(result?.payload?.condition_differences) ? result.payload.condition_differences : []);
-      setStatusMessage(rows.length > 0 ? 'Experiment comparison generated.' : 'No comparable experiments available.');
-    } catch {
-      setComparisonError('Unable to compare experiments.');
-    } finally {
-      setLoadingComparison(false);
-    }
+  const handleRefreshComparison = async () => {
+    await loadExperiments();
+    await requestComparison(compareIds);
   };
 
   const allocatedBlocks = (poolData?.blocks ?? []).filter((block) => block.allocated);
@@ -466,6 +620,75 @@ function App() {
     experiments.filter((experiment) => compareIds.includes(experiment.experiment_id)),
   );
   const selectedComparisonExperiments = experiments.filter((experiment) => compareIds.includes(experiment.experiment_id));
+  const selectedGraphMetric = getComparisonMetric(graphMetric);
+  const graphRows = useMemo(
+    () => comparisonResults.map((row, index) => ({
+      ...row,
+      graphIndex: index,
+      graphValue: row[graphMetric],
+    })),
+    [comparisonResults, graphMetric],
+  );
+  const renderWorkloadGraph = (group) => {
+    const metrics = group.metrics
+      .map((key) => getComparisonMetric(key) ?? (key === 'pool_capacity'
+        ? { key, label: 'Pool capacity', unit: 'bytes' }
+        : key === 'allocated_memory'
+          ? { key, label: 'Allocated memory', unit: 'bytes' }
+          : key === 'free_memory'
+            ? { key, label: 'Free memory', unit: 'bytes' }
+            : { key, label: key.replaceAll('_', ' '), unit: 'unavailable' }));
+    const rows = comparisonResults;
+    const values = rows.flatMap((row) => metrics.map((metric) => {
+      const value = Number(row[metric.key]);
+      return Number.isFinite(value) ? value * (metric.fraction ? 100 : 1) : null;
+    }).filter((value) => value !== null));
+    const maxValue = Math.max(...values, 1);
+    return (
+      <div className="analytics-chart" key={group.key}>
+        <div className="analytics-chart-heading">
+          <h4>{group.title}</h4>
+          <span>{graphType === 'bar' ? 'Grouped bars' : 'Metric trend'}</span>
+        </div>
+        {graphType === 'bar' ? (
+          <div className="grouped-bars" role="img" aria-label={`${group.title} comparison chart`}>
+            {rows.map((row, rowIndex) => (
+              <div className="chart-group" key={row.experiment_id || rowIndex}>
+                <div className="chart-group-bars">
+                  {metrics.map((metric) => {
+                    const raw = Number(row[metric.key]);
+                    const value = Number.isFinite(raw) ? raw * (metric.fraction ? 100 : 1) : null;
+                    return (
+                      <div className="chart-bar-column" key={metric.key} title={`${row.name || row.strategy}: ${metric.label} — ${value === null ? 'Unavailable' : formatMetricValue(metric, raw)}`}>
+                        <div className="chart-bar-value">{showGraphValues && value !== null ? formatMetricValue(metric, raw) : ''}</div>
+                        <div className="analytics-bar" style={{ height: `${value === null ? 0 : Math.max(4, (value / maxValue) * 100)}%`, background: `hsl(${160 + ((rowIndex * 35) % 140)} 55% 42%)` }} />
+                      </div>
+                    );
+                  })}
+                </div>
+                <strong>{row.name || row.strategy}</strong>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="line-chart-wrap">
+            <svg viewBox="0 0 600 180" role="img" aria-label={`${group.title} trend chart`}>
+              {metrics.map((metric, metricIndex) => {
+                const points = rows.map((row, index) => {
+                  const raw = Number(row[metric.key]);
+                  const value = Number.isFinite(raw) ? raw * (metric.fraction ? 100 : 1) : null;
+                  return `${rows.length === 1 ? 300 : 24 + (index * 552) / (rows.length - 1)},${value === null ? 170 : 170 - (value / maxValue) * 145}`;
+                }).join(' ');
+                return <polyline key={metric.key} points={points} fill="none" stroke={`hsl(${160 + metricIndex * 35} 55% 42%)`} strokeWidth="3" />;
+              })}
+            </svg>
+            <div className="line-chart-labels">{rows.map((row) => <span key={row.experiment_id}>{row.name || row.strategy}</span>)}</div>
+          </div>
+        )}
+        {showGraphLegend && <div className="chart-legend">{metrics.map((metric, index) => <span key={metric.key}><i style={{ background: `hsl(${160 + index * 35} 55% 42%)` }} />{metric.label}</span>)}</div>}
+      </div>
+    );
+  };
   const renderMetric = (label, value, suffix = '') => (
     <div className="mini-card">
       <span>{label}</span>
@@ -569,7 +792,19 @@ function App() {
         <div className="panel">
           <div className="section-head">
             <h3>Experiment history</h3>
-            <button type="button" className="subtle-button" onClick={loadExperiments}>Refresh</button>
+            <div className="button-row">
+              <button type="button" className="subtle-button" onClick={loadExperiments} disabled={loadingExperiments || clearingExperiments}>
+                Refresh
+              </button>
+              <button
+                type="button"
+                className="danger-button"
+                onClick={handleClearExperiments}
+                disabled={experiments.length === 0 || loadingExperiments || clearingExperiments}
+              >
+                {clearingExperiments ? 'Clearing…' : 'Clear history'}
+              </button>
+            </div>
           </div>
 
           {loadingExperiments ? (
@@ -639,7 +874,8 @@ function App() {
                         <td>
                           <strong>{(experiment.strategy || 'first_fit').replaceAll('_', ' ')}</strong>
                           <small className="table-submetric">{experiment.allocation_mode || 'variable_size'} · {formatNumber(experiment.pool_capacity, 0)} B pool</small>
-                          {experiment.fixed_block_size > 0 && <small className="table-submetric">{formatNumber(experiment.fixed_block_size, 0)} B fixed block</small>}
+                          {experiment.allocation_mode === 'fixed_size' && experiment.fixed_block_size > 0
+                            && <small className="table-submetric">{formatNumber(experiment.fixed_block_size, 0)} B fixed block</small>}
                         </td>
                         <td>
                           <strong>{experiment.workload_configuration || 'Custom workload'}</strong>
@@ -657,6 +893,51 @@ function App() {
             </div>
             </>
           )}
+          <div className="allocation-details-panel">
+            <div className="section-head">
+              <div>
+                <h3>Allocated memory space</h3>
+                <p className="muted-note">Live block details from the allocator state.</p>
+              </div>
+              <span className="status-chip stable">{allocatedBlocks.length} active</span>
+            </div>
+            {allocatedBlocks.length === 0 ? (
+              <div className="state-box empty">No memory blocks are currently allocated.</div>
+            ) : (
+              <div className="table-wrap allocation-details-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Block</th>
+                      <th>Allocation</th>
+                      <th>Offset</th>
+                      <th>Requested</th>
+                      <th>Reserved</th>
+                      <th>Internal overhead</th>
+                      <th>State</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allocatedBlocks.map((block) => {
+                      const requestedSize = toNumber(block.requested_size, block.size);
+                      const reservedSize = toNumber(block.size);
+                      return (
+                        <tr key={block.allocation_id ?? block.id} className={selectedAllocationId === block.allocation_id ? 'selected-row' : ''}>
+                          <td>{block.id ?? '—'}</td>
+                          <td>{block.allocation_id ?? '—'}</td>
+                          <td>{formatNumber(block.offset, 0)} B</td>
+                          <td>{formatNumber(requestedSize, 0)} B</td>
+                          <td>{formatNumber(reservedSize, 0)} B</td>
+                          <td>{formatNumber(Math.max(0, reservedSize - requestedSize), 0)} B</td>
+                          <td><span className="status-chip stable"><span className="status-dot" />Allocated</span></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="panel detail-panel">
@@ -717,7 +998,9 @@ function App() {
                     <div><dt>Strategy</dt><dd>{summaryExperiment.strategy}</dd></div>
                     <div><dt>Mode</dt><dd>{summaryExperiment.allocation_mode || 'variable_size'}</dd></div>
                     <div><dt>Pool capacity</dt><dd>{formatNumber(summaryExperiment.pool_capacity, 0)}</dd></div>
-                    <div><dt>Fixed block</dt><dd>{formatNumber(summaryExperiment.fixed_block_size, 0)}</dd></div>
+                    {summaryExperiment.allocation_mode === 'fixed_size' && (
+                      <div><dt>Fixed block</dt><dd>{formatNumber(summaryExperiment.fixed_block_size, 0)}</dd></div>
+                    )}
                     <div><dt>Random seed</dt><dd>{summaryExperiment.random_seed ?? 0}</dd></div>
                     <div><dt>Timestamp</dt><dd>{summaryExperiment.timestamp ? new Date(summaryExperiment.timestamp).toLocaleString() : '—'}</dd></div>
                     <div><dt>Workload</dt><dd>{summaryExperiment.workload_configuration || 'Custom workload'}</dd></div>
@@ -871,6 +1154,62 @@ function App() {
         </div>
       </section>
 
+      <section className="panel analytics-panel">
+        <div className="section-head">
+          <div>
+            <h3>Workload Comparison Analytics</h3>
+            <p className="muted-note">Visualize actual metrics from the experiments selected above. Missing backend metrics are shown as unavailable rather than estimated.</p>
+          </div>
+          <div className="button-row">
+            <button type="button" className="subtle-button" onClick={handleRefreshComparison} disabled={loadingComparison || compareIds.length < 2}>
+              {loadingComparison ? 'Refreshing…' : 'Refresh graphs'}
+            </button>
+            <button type="button" className="subtle-button" onClick={handleExportComparison} disabled={!comparisonCsv}>Export CSV</button>
+            <button type="button" className="subtle-button" onClick={handleClearComparison} disabled={compareIds.length === 0}>Clear selection</button>
+          </div>
+        </div>
+        <div className="analytics-summary">
+          <span><strong>{compareIds.length}</strong> selected</span>
+          <span>Strategies: {selectedComparisonExperiments.map((item) => item.strategy?.replaceAll('_', ' ')).filter(Boolean).join(', ') || '—'}</span>
+          <span>Modes: {selectedComparisonExperiments.map((item) => item.allocation_mode?.replaceAll('_', ' ')).filter(Boolean).join(', ') || '—'}</span>
+          <span>Workload conditions: {comparisonConditionsMatch === true ? 'Matching' : comparisonConditionsMatch === false || locallyDetectedConditionDifferences.length ? 'Different' : 'Not evaluated'}</span>
+        </div>
+        <div className="analytics-controls">
+          <label>Focus metric
+            <select value={graphMetric} onChange={(event) => setGraphMetric(event.target.value)}>
+              {COMPARISON_METRICS.map((metric) => <option key={metric.key} value={metric.key}>{metric.label}</option>)}
+            </select>
+          </label>
+          <label>Chart type
+            <select value={graphType} onChange={(event) => setGraphType(event.target.value)}>
+              <option value="bar">Grouped bar</option>
+              <option value="line">Line trend</option>
+            </select>
+          </label>
+          <label className="checkbox-label"><input type="checkbox" checked={showGraphLegend} onChange={(event) => setShowGraphLegend(event.target.checked)} /> Show legend</label>
+          <label className="checkbox-label"><input type="checkbox" checked={showGraphValues} onChange={(event) => setShowGraphValues(event.target.checked)} /> Show values</label>
+          {selectedGraphMetric && <span className="muted-note">Focus: {selectedGraphMetric.label} ({selectedGraphMetric.unit})</span>}
+        </div>
+        {comparisonError ? (
+          <div className="state-box error" role="alert">
+            {comparisonError}
+            <button type="button" className="subtle-button" onClick={handleRefreshComparison}>Retry comparison</button>
+          </div>
+        ) : comparisonResults.length === 0 ? (
+          <div className="state-box empty">Select at least two experiments and run Compare selected to load workload analytics.</div>
+        ) : (
+          <>
+            {comparisonConditionsMatch === false && (
+              <div className="state-box warning">These experiments use different workload configurations. Performance differences may not be caused solely by the allocation strategy.</div>
+            )}
+            <div className="analytics-focus-chart">
+              {renderWorkloadGraph({ key: 'focus-metric', title: `${selectedGraphMetric?.label || 'Selected metric'} focus`, metrics: [graphMetric] })}
+            </div>
+            <div className="analytics-chart-grid">{WORKLOAD_GRAPH_GROUPS.map(renderWorkloadGraph)}</div>
+          </>
+        )}
+      </section>
+
       <section className="panel comparison-panel">
         <div className="section-head">
           <h3>Side-by-side comparison</h3>
@@ -1001,11 +1340,53 @@ function App() {
               <label>Allocation probability (%)<input type="number" min="0" max="100" value={randomAllocationProbability} onChange={(event) => setRandomAllocationProbability(event.target.value)} /></label>
               <label>Deallocation probability (%)<input type="number" min="0" max="100" value={randomDeallocationProbability} onChange={(event) => setRandomDeallocationProbability(event.target.value)} /></label>
               <label>Seed<input type="number" min="0" value={randomSeed} onChange={(event) => setRandomSeed(event.target.value)} /></label>
+              <label>Allocation algorithm
+                <select value={randomStrategy} onChange={(event) => setRandomStrategy(event.target.value)}>
+                  <option value="first_fit">First-Fit</option>
+                  <option value="best_fit">Best-Fit</option>
+                </select>
+              </label>
+              <label>Allocation mode
+                <select value={randomAllocationMode} onChange={(event) => setRandomAllocationMode(event.target.value)}>
+                  <option value="variable_size">Variable-size</option>
+                  <option value="fixed_size">Fixed-size</option>
+                </select>
+              </label>
+              {randomAllocationMode === 'fixed_size' && (
+                <label>Fixed block size (bytes)
+                  <input
+                    type="number"
+                    min="1"
+                    max={poolData?.capacity ?? poolCapacity}
+                    value={randomFixedBlockSize}
+                    onChange={(event) => setRandomFixedBlockSize(event.target.value)}
+                  />
+                </label>
+              )}
             </div>
-            <button type="button" onClick={handleRunRandomWorkload} disabled={loading || !poolData}>Generate and run from backend</button>
-            <p className="muted-note">Generated with the configured C++ allocator and seed; free operations only reference allocations that succeeded during generation.</p>
+            <p className="random-workload-selection">
+              Selected: <strong>{randomStrategy === 'first_fit' ? 'First-Fit' : 'Best-Fit'}</strong>
+              {' / '}
+              <strong>{randomAllocationMode === 'fixed_size' ? `Fixed-size (${randomFixedBlockSize} bytes)` : 'Variable-size'}</strong>
+            </p>
+            {randomWorkloadError && <p className="random-workload-error" role="alert">{randomWorkloadError}</p>}
+            {randomExecutionConfiguration && (
+              <p className="muted-note" role="status">
+                Last executed: {randomExecutionConfiguration.strategy === 'best_fit' ? 'Best-Fit' : 'First-Fit'}
+                {' / '}{randomExecutionConfiguration.allocation_mode === 'fixed_size'
+                  ? `Fixed-size (${randomExecutionConfiguration.fixed_block_size} bytes)`
+                  : 'Variable-size'}
+              </p>
+            )}
+            <button type="button" onClick={handleRunRandomWorkload} disabled={loading || !poolData || Boolean(randomWorkloadError)}>Generate and run from backend</button>
+            <p className="muted-note">The selected algorithm and allocation mode are validated and applied by the C++ backend. The seed and workload settings are saved with the experiment.</p>
           </div>
           <div className="button-row">
+            <button type="button" onClick={handleStartWorkloadSession} disabled={loading || !poolData}>Start stepwise</button>
+            <button type="button" onClick={handleWorkloadStep} disabled={!workloadSession || !['paused', 'running'].includes(workloadSession.status)}>Step</button>
+            <button type="button" onClick={handleWorkloadPause} disabled={!workloadSession || workloadSession.status !== 'running'}>Pause</button>
+            <button type="button" onClick={handleWorkloadResume} disabled={!workloadSession || workloadSession.status !== 'paused'}>Resume</button>
+            <button type="button" className="subtle-button" onClick={handleWorkloadReset} disabled={!workloadSession || workloadSession.status === 'idle'}>Reset session</button>
             <button type="button" onClick={handleRunWorkload} disabled={loading || !poolData}>Run workload</button>
             <button type="button" onClick={handleExportCsv} disabled={loading}>Export CSV</button>
             <button type="button" onClick={handleDownloadCsvTemplate} disabled={loading}>Download CSV template</button>
@@ -1014,6 +1395,18 @@ function App() {
               <input type="file" accept=".csv,text/csv" onChange={handleImportCsv} />
             </label>
           </div>
+          {workloadSession && (
+            <div className="workload-progress" role="status">
+              <div className="section-head">
+                <strong>Stepwise session: {workloadSession.status}</strong>
+                <span>{workloadSession.current_operation} / {workloadSession.total_operations} operations</span>
+              </div>
+              <progress value={workloadSession.progress ?? 0} max="100" aria-label="Workload progress" />
+              {workloadSession.results?.length > 0 && (
+                <p className="muted-note">Last result: {workloadSession.results[workloadSession.results.length - 1].operation} — {workloadSession.results[workloadSession.results.length - 1].success ? 'succeeded' : 'failed'}</p>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="panel">

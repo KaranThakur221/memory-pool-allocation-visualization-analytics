@@ -72,10 +72,24 @@ This document reflects the implementation present in the current source tree.
   reference, reports row-specific failures, and limits files to 1 MiB. It
   submits validated operations to the backend as JSON. A downloadable example
   template is available beside the editor.
-- `POST /api/workload/random` generates a seeded sequence using a probe
-  `MemoryPool`; generated free operations reference only allocations that
-  succeeded in that generation pass. The experiment is then executed and
-  measured from a fresh pool using the same sequence and seed.
+- `POST /api/workload/random` accepts a placement algorithm (`first_fit` or
+  `best_fit`) separately from an allocation mode (`fixed_size` or
+  `variable_size`). Fixed-size mode requires a valid block size that covers
+  the maximum generated request. Workload generation is independent of allocator
+  outcomes, so compatible runs with the same seed/settings receive the same
+  operation sequence; allocations that fail for one configuration can
+  consequently cause a real failed deallocation later in that run. The API
+  returns the configuration actually used, and saves it with the experiment
+  and an actual-measurement benchmark record.
+- Stepwise execution is available through `POST /api/workload/session/start`,
+  `GET /api/workload/session/status`, `POST /api/workload/session/step`,
+  `POST /api/workload/session/pause`, `POST /api/workload/session/resume`, and
+  `POST /api/workload/session/reset`. The backend owns the live allocator and
+  operation cursor, so Step executes exactly the next operation without
+  restarting the workload. Completion persists the actual configuration and
+  final pool state. Reset discards only the active session and does not clear
+  experiment history. The session is process-local and supports one active
+  workload at a time.
 - `POST /api/benchmark` measures allocation/deallocation call latency and
   overall benchmark elapsed time separately. Set `fixed_block_size` to
   configure fixed-size comparisons. Benchmark requests are bounded to 100,000

@@ -11,6 +11,7 @@ public:
 
     bool load(std::vector<ExperimentRecord>& records, std::string& error) const;
     bool append(const ExperimentRecord& record, std::string& error) const;
+    bool clear(std::string& error) const;
     const std::string& path() const;
 
 private:

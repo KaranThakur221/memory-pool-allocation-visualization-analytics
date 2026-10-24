@@ -7,6 +7,8 @@ import {
   toggleComparisonSelection,
   COMPARISON_METRICS,
   formatMetricValue,
+  getComparisonMetric,
+  WORKLOAD_GRAPH_GROUPS,
 } from '../src/experimentDashboard.js';
 
 test('comparison selection adds, removes, and respects its limit', () => {
@@ -21,15 +23,22 @@ test('condition checking detects workload and configuration mismatches', () => {
     allocation_mode: 'variable_size',
     fixed_block_size: 64,
     workload_signature: 'allocate:32:0;',
+    workload_configuration: 'Seeded random: operations=1, min=32, max=32',
     random_seed: 7,
   };
   assert.deepEqual(getConditionDifferences([baseline, { ...baseline }]), []);
   assert.deepEqual(
     getConditionDifferences([
       baseline,
-      { ...baseline, pool_capacity: 2048, workload_signature: 'allocate:64:0;', random_seed: 8 },
+      {
+        ...baseline,
+        pool_capacity: 2048,
+        workload_signature: 'allocate:64:0;',
+        workload_configuration: 'Seeded random: operations=1, min=64, max=64',
+        random_seed: 8,
+      },
     ]),
-    ['Pool capacities differ', 'Workload operation sequences differ', 'Random seeds differ'],
+    ['Pool capacities differ', 'Workload operation sequences differ', 'Workload settings differ', 'Random seeds differ'],
   );
 });
 
@@ -45,4 +54,10 @@ test('fraction metrics are rendered as percentages', () => {
   assert.equal(formatMetricValue(successRate, 0.875), '87.5%');
   const latency = COMPARISON_METRICS.find((metric) => metric.key === 'average_allocation_latency_ms');
   assert.equal(formatMetricValue(latency, 0.0035), '0.0035 ms');
+});
+
+test('workload graph groups reference available comparison metrics', () => {
+  assert.equal(getComparisonMetric('average_allocation_latency_ms').label, 'Avg allocation latency');
+  assert.equal(WORKLOAD_GRAPH_GROUPS.length, 4);
+  assert.ok(WORKLOAD_GRAPH_GROUPS.every((group) => group.metrics.length >= 4));
 });
