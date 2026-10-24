@@ -1,0 +1,5 @@
+experiment_id,event_id,operation,allocation_id,requested_size,allocated_size,memory_offset,allocation_strategy,success,allocation_latency_ns,deallocation_latency_ns,memory_before,memory_after,error_info
+exp_001,e1,allocate,1,64,64,0,first_fit,true,120,0,262144,262144,
+exp_001,e2,deallocate,1,64,0,0,first_fit,true,0,80,262144,262144,
+exp_002,e1,allocate,2,128,128,64,best_fit,true,110,0,262144,262144,
+exp_002,e2,deallocate,2,128,0,64,best_fit,true,0,90,262144,262144,

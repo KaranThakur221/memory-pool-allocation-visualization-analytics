@@ -1,0 +1,19 @@
+Start testing: Oct 24 18:45 IST
+----------------------------------------------------------
+1/1 Testing: allocator_tests
+1/1 Test: allocator_tests
+Command: "/run/media/karan-thakur/D/Memory_Pool_Allocator/build/allocator_tests"
+Directory: /run/media/karan-thakur/D/Memory_Pool_Allocator/build
+"allocator_tests" start time: Oct 24 18:45 IST
+Output:
+----------------------------------------------------------
+All allocator tests passed.
+<end of output>
+Test time =   0.05 sec
+----------------------------------------------------------
+Test Passed.
+"allocator_tests" end time: Oct 24 18:45 IST
+"allocator_tests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Oct 24 18:45 IST

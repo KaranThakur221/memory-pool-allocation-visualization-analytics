@@ -1,0 +1,16 @@
+{
+  "capacity": 262144,
+  "pool_strategy": "first_fit",
+  "blocks": [
+    {"id": 1, "offset": 0, "size": 64, "requested_size": 0, "allocated": false, "allocation_id": 0, "state": "free"},
+    {"id": 2, "offset": 64, "size": 128, "requested_size": 128, "allocated": true, "allocation_id": 11, "state": "allocated"},
+    {"id": 3, "offset": 192, "size": 261952, "requested_size": 0, "allocated": false, "allocation_id": 0, "state": "free"}
+  ],
+  "statistics": {
+    "allocated_memory": 128,
+    "free_memory": 262016,
+    "requested_memory": 128,
+    "largest_free_block": 261952,
+    "memory_utilization": 0.000488281
+  }
+}

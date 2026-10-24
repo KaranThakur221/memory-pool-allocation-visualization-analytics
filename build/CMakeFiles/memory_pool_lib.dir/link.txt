@@ -1,0 +1,2 @@
+/usr/bin/ar qc libmemory_pool_lib.a CMakeFiles/memory_pool_lib.dir/src/memory_pool.cpp.o CMakeFiles/memory_pool_lib.dir/src/fixed_size_pool.cpp.o CMakeFiles/memory_pool_lib.dir/src/variable_size_pool.cpp.o CMakeFiles/memory_pool_lib.dir/src/first_fit.cpp.o CMakeFiles/memory_pool_lib.dir/src/best_fit.cpp.o CMakeFiles/memory_pool_lib.dir/src/benchmark.cpp.o CMakeFiles/memory_pool_lib.dir/src/experiment_metrics.cpp.o CMakeFiles/memory_pool_lib.dir/src/experiment_store.cpp.o
+/usr/bin/ranlib libmemory_pool_lib.a

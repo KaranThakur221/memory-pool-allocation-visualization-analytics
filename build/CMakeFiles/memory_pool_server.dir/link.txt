@@ -1,0 +1,1 @@
+/usr/bin/c++ -Wl,--dependency-file=CMakeFiles/memory_pool_server.dir/link.d CMakeFiles/memory_pool_server.dir/src/server_main.cpp.o CMakeFiles/memory_pool_server.dir/src/api_server.cpp.o -o memory_pool_server  libmemory_pool_lib.a

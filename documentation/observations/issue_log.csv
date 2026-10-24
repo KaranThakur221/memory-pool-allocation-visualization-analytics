@@ -1,0 +1,3 @@
+issue_id,date,module,error_description,error_message,reproduction_steps,root_cause,resolution,verification,status
+issue_001,2026-10-24,MemoryPool,Invalid allocation size,Request exceeded pool capacity,Request 2048 bytes from 256-byte pool,Validation guard missing,Added bounds check,Test run,closed
+issue_002,2026-10-24,MemoryPool,Pointer validation,Invalid pointer returned false,Deallocate nullptr,Pointer-check guard added,Test run,closed
