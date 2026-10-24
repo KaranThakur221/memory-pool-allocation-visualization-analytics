@@ -1218,7 +1218,7 @@ int PoolApiServer::run() {
             } else {
                 std::lock_guard<std::mutex> lock(g_workload_session_mutex);
                 g_workload_session = WorkloadSession{};
-                g_workload_session.status = WorkloadSession::Status::Paused;
+                g_workload_session.status = WorkloadSession::Status::Running;
                 g_workload_session.workload = workload;
                 g_workload_session.strategy = strategy_name;
                 g_workload_session.allocation_mode = allocation_mode;
@@ -1276,7 +1276,6 @@ int PoolApiServer::run() {
                         response_body = make_json_response(true, "Workload completed and saved", workload_session_json(g_workload_session));
                     }
                 } else {
-                    g_workload_session.status = WorkloadSession::Status::Paused;
                     response_body = make_json_response(true, "Workload operation completed", workload_session_json(g_workload_session));
                 }
             }

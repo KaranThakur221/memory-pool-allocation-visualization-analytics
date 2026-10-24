@@ -1,2 +1,2 @@
-allocator_tests 5 0.00742057
+allocator_tests 6 0.00756643
 ---

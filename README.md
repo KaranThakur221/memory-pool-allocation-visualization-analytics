@@ -11,22 +11,146 @@ ctest --test-dir build --output-on-failure
 cd frontend && npm ci && npm test && npm run build
 ```
 
-## Run the application
+## Run the complete dashboard application
+
+The dashboard consists of two services:
+
+1. `memory_pool_server`: the C++ allocator and HTTP API.
+2. Vite: the React development server and `/api` proxy.
+
+The commands below assume Linux/macOS and that the repository root is the
+current directory. You can either use the one-command launcher above or run
+the services manually in separate terminals.
+
+### Quick start: one command
+
+After the backend has been built and frontend dependencies have been
+installed, start both services together from the repository root:
+
+```bash
+./run_dashboard.sh
+```
+
+This starts the C++ backend on port `8080` and the Vite dashboard on port
+`3000`, then prints the dashboard URL. Press `Ctrl+C` once to stop both
+services. The launcher also cleans up the remaining service if either one
+exits unexpectedly.
+
+Optional environment variables:
+
+```bash
+MEMORY_POOL_BACKEND_PORT=8081 \
+MEMORY_POOL_FRONTEND_PORT=3001 \
+MEMORY_POOL_EXPERIMENTS_PATH=/tmp/memory-pool-experiments.bin \
+./run_dashboard.sh
+```
+
+If the project has not been prepared yet, run the build and dependency
+installation steps below once before using the launcher.
+
+### 1. Install prerequisites
+
+Install:
+
+- C++17 compiler
+- CMake
+- GNU Make or another CMake build tool
+- Node.js and npm
+
+Build the backend and install frontend dependencies:
+
+```bash
+cmake -S . -B build
+cmake --build build
+cd frontend
+npm ci
+cd ..
+```
+
+If `frontend/package-lock.json` is unavailable, use `npm install` instead of
+`npm ci`.
+
+### 2. Start the C++ backend
+
+From the repository root, open **Terminal 1**:
 
 ```bash
 ./build/memory_pool_server 8080
 ```
 
-In a second terminal:
+The API is now available at `http://localhost:8080`. Keep this terminal open.
+The default experiment history is stored in `data/experiments.bin`. To use a
+separate history file, set the path before starting the backend:
+
+```bash
+MEMORY_POOL_EXPERIMENTS_PATH=/tmp/memory-pool-experiments.bin \
+  ./build/memory_pool_server 8080
+```
+
+The history file should be used by only one backend process at a time.
+
+### 3. Start the React/Vite frontend
+
+Open **Terminal 2** in the repository root:
 
 ```bash
 cd frontend
 npm run dev -- --host 0.0.0.0
 ```
 
-Open the Vite URL printed by the frontend. The frontend proxies `/api` to
-`http://localhost:8080` by default; set `MEMORY_POOL_API_URL` before starting
-Vite to use another local backend URL.
+Open the URL printed by Vite, normally:
+
+```text
+http://localhost:3000/
+```
+
+The frontend proxies every `/api` request to `http://localhost:8080` by
+default. If the backend is running on another port, start Vite with the
+matching API URL:
+
+```bash
+MEMORY_POOL_API_URL=http://localhost:8081 \
+  npm run dev -- --host 0.0.0.0
+```
+
+For a different frontend port:
+
+```bash
+npm run dev -- --host 0.0.0.0 --port 3001
+```
+
+### 4. Verify that all services are running
+
+With both terminals running, check the backend directly:
+
+```bash
+curl http://localhost:8080/api/pool/state
+```
+
+A successful response contains `"success": true` and the current pool
+state. Then open the Vite URL in a browser. The dashboard should show
+**Connected to allocator backend** and display the live memory pool.
+
+### 5. Run a production frontend preview
+
+For a production-style local run, build the frontend first:
+
+```bash
+cd frontend
+npm run build
+npm run preview -- --host 0.0.0.0
+```
+
+The preview server serves the compiled frontend, but API proxy behavior is
+intended for the Vite development server. Keep the backend running and use
+the development server when testing the full proxied dashboard locally.
+
+### 6. Stop the application
+
+Press `Ctrl+C` in the backend and frontend terminals. Stop the backend first
+or the frontend first; no allocator data is deleted by stopping either
+service. Experiments already persisted in `data/experiments.bin` remain
+available the next time the backend starts with the same history path.
 
 The standalone C++ demonstration remains available with:
 

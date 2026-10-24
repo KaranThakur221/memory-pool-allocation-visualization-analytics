@@ -602,6 +602,10 @@ function App() {
     () => experiments.find((experiment) => experiment.experiment_id === selectedExperimentId) ?? null,
     [experiments, selectedExperimentId],
   );
+  const selectedMemoryBlock = useMemo(
+    () => allocatedBlocks.find((block) => block.allocation_id === selectedAllocationId) ?? null,
+    [allocatedBlocks, selectedAllocationId],
+  );
 
   const comparisonChartRows = useMemo(() => {
     if (!comparisonResults.length) return [];
@@ -629,6 +633,63 @@ function App() {
     })),
     [comparisonResults, graphMetric],
   );
+  const analyticsOverview = useMemo(() => {
+    if (!comparisonResults.length) return null;
+    const finiteValues = (key) => comparisonResults.map((row) => Number(row[key])).filter(Number.isFinite);
+    const average = (key) => {
+      const values = finiteValues(key);
+      return values.length ? values.reduce((total, value) => total + value, 0) / values.length : null;
+    };
+    const sum = (key) => {
+      const values = finiteValues(key);
+      return values.length ? values.reduce((total, value) => total + value, 0) : null;
+    };
+    const first = comparisonResults[0];
+    const allocatedMemory = Number(first.allocated_memory);
+    const freeMemory = Number(first.free_memory);
+    const successfulAllocations = sum('successful_allocations');
+    const failedAllocations = sum('failed_allocations');
+    return {
+      averageLatency: average('average_allocation_latency_ms'),
+      averageExecution: average('execution_time_ms'),
+      averageUtilization: average('peak_memory_utilization'),
+      averageSuccessRate: average('allocation_success_rate'),
+      allocatedMemory: Number.isFinite(allocatedMemory) ? allocatedMemory : null,
+      freeMemory: Number.isFinite(freeMemory) ? freeMemory : null,
+      successfulAllocations,
+      failedAllocations,
+      internalFragmentation: average('internal_fragmentation'),
+      externalFragmentation: average('external_fragmentation'),
+    };
+  }, [comparisonResults]);
+  const renderDonut = (title, segments, centerLabel) => {
+    const availableSegments = segments.filter((segment) => Number.isFinite(segment.value) && segment.value >= 0);
+    const total = availableSegments.reduce((sum, segment) => sum + segment.value, 0);
+    if (!availableSegments.length || total <= 0) {
+      return <div className="analytics-distribution state-box empty">{title} is unavailable for the selected experiments.</div>;
+    }
+    let cursor = 0;
+    const stops = availableSegments.map((segment) => {
+      const start = (cursor / total) * 100;
+      cursor += segment.value;
+      return `${segment.color} ${start}% ${(cursor / total) * 100}%`;
+    }).join(', ');
+    return (
+      <div className="analytics-distribution">
+        <h4>{title}</h4>
+        <div className="donut-layout">
+          <div className="donut-chart" style={{ background: `conic-gradient(${stops})` }} role="img" aria-label={`${title} distribution`}>
+            <strong>{centerLabel}</strong>
+          </div>
+          <div className="donut-legend">
+            {availableSegments.map((segment) => (
+              <span key={segment.label}><i style={{ background: segment.color }} />{segment.label}<strong>{formatNumber(segment.value, 0)}</strong></span>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
   const renderWorkloadGraph = (group) => {
     const metrics = group.metrics
       .map((key) => getComparisonMetric(key) ?? (key === 'pool_capacity'
@@ -644,6 +705,7 @@ function App() {
       return Number.isFinite(value) ? value * (metric.fraction ? 100 : 1) : null;
     }).filter((value) => value !== null));
     const maxValue = Math.max(...values, 1);
+    const chartColors = ['var(--chart-first-fit)', 'var(--chart-best-fit)', 'var(--chart-utilization)', 'var(--chart-fragmentation)', 'var(--chart-failure)'];
     return (
       <div className="analytics-chart" key={group.key}>
         <div className="analytics-chart-heading">
@@ -661,7 +723,7 @@ function App() {
                     return (
                       <div className="chart-bar-column" key={metric.key} title={`${row.name || row.strategy}: ${metric.label} — ${value === null ? 'Unavailable' : formatMetricValue(metric, raw)}`}>
                         <div className="chart-bar-value">{showGraphValues && value !== null ? formatMetricValue(metric, raw) : ''}</div>
-                        <div className="analytics-bar" style={{ height: `${value === null ? 0 : Math.max(4, (value / maxValue) * 100)}%`, background: `hsl(${160 + ((rowIndex * 35) % 140)} 55% 42%)` }} />
+                        <div className="analytics-bar" style={{ height: `${value === null ? 0 : Math.max(4, (value / maxValue) * 100)}%`, background: chartColors[rowIndex % chartColors.length] }} />
                       </div>
                     );
                   })}
@@ -679,13 +741,13 @@ function App() {
                   const value = Number.isFinite(raw) ? raw * (metric.fraction ? 100 : 1) : null;
                   return `${rows.length === 1 ? 300 : 24 + (index * 552) / (rows.length - 1)},${value === null ? 170 : 170 - (value / maxValue) * 145}`;
                 }).join(' ');
-                return <polyline key={metric.key} points={points} fill="none" stroke={`hsl(${160 + metricIndex * 35} 55% 42%)`} strokeWidth="3" />;
+                return <polyline key={metric.key} points={points} fill="none" stroke={chartColors[metricIndex % chartColors.length]} strokeWidth="3" />;
               })}
             </svg>
             <div className="line-chart-labels">{rows.map((row) => <span key={row.experiment_id}>{row.name || row.strategy}</span>)}</div>
           </div>
         )}
-        {showGraphLegend && <div className="chart-legend">{metrics.map((metric, index) => <span key={metric.key}><i style={{ background: `hsl(${160 + index * 35} 55% 42%)` }} />{metric.label}</span>)}</div>}
+        {showGraphLegend && <div className="chart-legend">{metrics.map((metric, index) => <span key={metric.key}><i style={{ background: chartColors[index % chartColors.length] }} />{metric.label}</span>)}</div>}
       </div>
     );
   };
@@ -766,9 +828,21 @@ function App() {
 
       <section className="memory-panel panel">
         <div className="section-head">
-          <h3>Memory layout</h3>
+          <div>
+            <h3>Memory layout</h3>
+            <p className="muted-note">Actual proportional block map from the allocator backend.</p>
+          </div>
+          <span className="status-chip stable">{poolData ? `${formatNumber(poolData.capacity, 0)} B capacity` : 'Loading'}</span>
         </div>
-        <div className="memory-visualization">
+        {poolData && (
+          <div className="memory-layout-summary">
+            <span>Total<strong>{formatNumber(poolData.capacity, 0)} B</strong></span>
+            <span>Allocated<strong>{formatNumber(poolData.statistics?.allocated_memory, 0)} B</strong></span>
+            <span>Free<strong>{formatNumber(poolData.statistics?.free_memory, 0)} B</strong></span>
+            <span>Utilization<strong>{formatPercent((poolData.statistics?.memory_utilization ?? 0) * 100, 1)}</strong></span>
+          </div>
+        )}
+        <div className="memory-visualization" aria-label="Proportional memory pool layout">
           {!poolData ? (
             <div className={`state-box ${poolError ? 'error' : 'empty'}`} role={poolError ? 'alert' : undefined}>
               {loadingPool ? 'Loading memory state from the C++ backend…' : poolError}
@@ -779,13 +853,32 @@ function App() {
               type="button"
               className={`memory-block ${block.allocated ? 'allocated' : 'free'} ${selectedAllocationId === block.allocation_id ? 'selected' : ''}`}
               style={{ width: `${(block.size / Math.max(poolData.capacity, 1)) * 100}%` }}
-              title={`Block ${block.id} | Offset ${block.offset} | Size ${block.size} | Allocation ${block.allocation_id}`}
+              aria-label={`${block.allocated ? `Allocated block ${block.allocation_id}` : 'Free block'}: offset ${block.offset}, size ${block.size} bytes`}
+              title={`${block.allocated ? `Allocation ${block.allocation_id}` : 'Free block'} | Block ${block.id} | Offset ${block.offset} | Size ${block.size} bytes`}
               onClick={() => block.allocated && setSelectedAllocationId(block.allocation_id)}
             >
-              <span>{block.state}</span>
+              <span>{block.allocated ? `A${block.allocation_id}` : 'Free'}</span>
             </button>
           ))}
         </div>
+        <div className="memory-legend" aria-label="Memory layout legend">
+          <span><i className="allocated-key" />Allocated</span>
+          <span><i className="free-key" />Free</span>
+          <span><i className="selected-key" />Selected</span>
+        </div>
+        {selectedMemoryBlock && (
+          <div className="selected-memory-details">
+            <h5>Selected allocation</h5>
+            <dl>
+              <div><dt>Allocation ID</dt><dd>{selectedMemoryBlock.allocation_id}</dd></div>
+              <div><dt>Block ID</dt><dd>{selectedMemoryBlock.id}</dd></div>
+              <div><dt>Offset</dt><dd>{formatNumber(selectedMemoryBlock.offset, 0)} B</dd></div>
+              <div><dt>Reserved size</dt><dd>{formatNumber(selectedMemoryBlock.size, 0)} B</dd></div>
+              <div><dt>Requested size</dt><dd>{formatNumber(selectedMemoryBlock.requested_size, 0)} B</dd></div>
+              <div><dt>Status</dt><dd>{selectedMemoryBlock.state}</dd></div>
+            </dl>
+          </div>
+        )}
       </section>
 
       <section className="two-column-grid">
@@ -1053,7 +1146,7 @@ function App() {
                 <h5>Allocation size distribution</h5>
                 {summaryExperiment.workload_metrics?.allocation_size_distribution?.length ? (
                   <div className="distribution-list">
-                    {summaryExperiment.workload_metrics.allocation_size_distribution.map((entry) => (
+                    {(summaryExperiment.workload_metrics?.allocation_size_distribution ?? []).map((entry) => (
                       <span key={entry.size} className="distribution-chip">{formatNumber(entry.size, 0)} B <strong>× {entry.count}</strong></span>
                     ))}
                   </div>
@@ -1107,7 +1200,7 @@ function App() {
                         </tr>
                       </thead>
                       <tbody>
-                        {summaryExperiment.benchmark_results.map((result) => (
+                        {(summaryExperiment.benchmark_results ?? []).map((result) => (
                           <tr key={`${result.experiment_id}-${result.strategy}`}>
                             <td>{result.strategy.replaceAll('_', ' ')}</td>
                             <td>{formatNumber(result.execution_time_ms, 3)} ms</td>
@@ -1129,7 +1222,7 @@ function App() {
                 <h5>Operation log</h5>
                 {Array.isArray(summaryExperiment.operation_sequence) && summaryExperiment.operation_sequence.length > 0 ? (
                   <div className="operation-list">
-                    {summaryExperiment.operation_sequence.map((item, index) => (
+                    {(summaryExperiment.operation_sequence ?? []).map((item, index) => (
                       <div key={`${item.operation}-${index}`} className={`operation-item ${item.success ? 'ok' : 'error'}`}>
                         <strong>{item.operation}</strong>
                         <span>{item.success ? 'Succeeded' : 'Failed'}</span>
@@ -1146,7 +1239,7 @@ function App() {
               {summaryExperiment.errors?.length > 0 && (
                 <div className="detail-section">
                   <h5>Recorded errors</h5>
-                  <ul className="error-list">{summaryExperiment.errors.map((error, index) => <li key={`${index}-${error}`}>{error}</li>)}</ul>
+                  <ul className="error-list">{(summaryExperiment.errors ?? []).map((error, index) => <li key={`${index}-${error}`}>{error}</li>)}</ul>
                 </div>
               )}
             </>
@@ -1201,6 +1294,41 @@ function App() {
           <>
             {comparisonConditionsMatch === false && (
               <div className="state-box warning">These experiments use different workload configurations. Performance differences may not be caused solely by the allocation strategy.</div>
+            )}
+            {analyticsOverview && (
+              <div className="analytics-overview">
+                <div className="analytics-overview-cards">
+                  {renderMetric('Avg allocation latency', formatNumber(analyticsOverview.averageLatency, 4), analyticsOverview.averageLatency === null ? '' : ' ms')}
+                  {renderMetric('Avg execution time', formatNumber(analyticsOverview.averageExecution, 3), analyticsOverview.averageExecution === null ? '' : ' ms')}
+                  {renderMetric('Peak utilization', formatPercent(analyticsOverview.averageUtilization, 1))}
+                  {renderMetric('Success rate', analyticsOverview.averageSuccessRate === null ? null : formatPercent(analyticsOverview.averageSuccessRate * 100, 1))}
+                </div>
+                <div className="analytics-distribution-grid">
+                  {renderDonut(
+                    'Memory distribution',
+                    [
+                      { label: 'Allocated', value: analyticsOverview.allocatedMemory, color: 'var(--chart-first-fit)' },
+                      { label: 'Free', value: analyticsOverview.freeMemory, color: '#64748B' },
+                    ],
+                    analyticsOverview.averageUtilization === null ? '—' : formatPercent(analyticsOverview.averageUtilization, 1),
+                  )}
+                  {renderDonut(
+                    'Allocation status',
+                    [
+                      { label: 'Successful', value: analyticsOverview.successfulAllocations, color: 'var(--success)' },
+                      { label: 'Failed', value: analyticsOverview.failedAllocations, color: 'var(--danger)' },
+                    ],
+                    analyticsOverview.successfulAllocations === null ? '—' : formatNumber(analyticsOverview.successfulAllocations, 0),
+                  )}
+                  <div className="analytics-distribution fragmentation-summary">
+                    <h4>Fragmentation</h4>
+                    <div className="fragmentation-values">
+                      <span><i style={{ background: 'var(--warning)' }} />Internal<strong>{formatPercent(analyticsOverview.internalFragmentation, 1)}</strong></span>
+                      <span><i style={{ background: '#A78BFA' }} />External<strong>{formatPercent(analyticsOverview.externalFragmentation, 1)}</strong></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
             <div className="analytics-focus-chart">
               {renderWorkloadGraph({ key: 'focus-metric', title: `${selectedGraphMetric?.label || 'Selected metric'} focus`, metrics: [graphMetric] })}
