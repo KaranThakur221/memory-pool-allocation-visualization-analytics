@@ -1,5 +1,11 @@
 # Development and Audit Log
 
+## 2026-10-25 — Comparative analysis CSV export
+
+**Feature/component:** Final comparison export  
+**Changes implemented:** Added a dedicated `Export Comparison CSV` action to the workload comparison analytics panel. It exports the latest selected comparison rows, including experiment identity/configuration, allocator results, allocation/deallocation metrics, execution timing, memory statistics, and fragmentation values returned by the backend. CSV fields are escaped according to RFC 4180-style rules, unavailable values remain blank, and the filename uses `memforge_comparative_analysis_YYYY-MM-DD_HH-mm-ss.csv`. The export is disabled until a comparison has been generated and does not modify history or allocator state.  
+**Verification:** Frontend production build and focused utility checks executed after implementation.
+
 ## 2026-10-25 — Proportional memory layout visualization
 
 **Feature/component:** Live memory pool visualization  

@@ -18,6 +18,7 @@ import {
   createRandomWorkloadRequest,
   validateRandomWorkloadConfiguration,
 } from './randomWorkload.js';
+import { comparisonFilename, comparisonToCsv } from './comparisonCsv.js';
 
 const SAMPLE_WORKLOAD = [
   { operation: 'allocate', size: 64 },
@@ -159,14 +160,18 @@ function App() {
   };
 
   const handleExportComparison = () => {
-    if (!comparisonCsv) return;
-    const url = URL.createObjectURL(new Blob([comparisonCsv], { type: 'text/csv;charset=utf-8' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'experiment-comparison.csv';
-    link.click();
-    URL.revokeObjectURL(url);
-    setStatusMessage('Experiment comparison CSV exported.');
+    try {
+      const csv = comparisonToCsv(comparisonResults, selectedComparisonExperiments, comparisonConditionsMatch);
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = comparisonFilename();
+      link.click();
+      URL.revokeObjectURL(url);
+      setStatusMessage('Comparative analysis CSV exported successfully.');
+    } catch (error) {
+      setStatusMessage(error.message || 'CSV export failed. Please try again.');
+    }
   };
 
   const loadExperiments = async () => {
@@ -1257,7 +1262,9 @@ function App() {
             <button type="button" className="subtle-button" onClick={handleRefreshComparison} disabled={loadingComparison || compareIds.length < 2}>
               {loadingComparison ? 'Refreshing…' : 'Refresh graphs'}
             </button>
-            <button type="button" className="subtle-button" onClick={handleExportComparison} disabled={!comparisonCsv}>Export CSV</button>
+            <button type="button" className="comparison-export-button" onClick={handleExportComparison} disabled={!comparisonResults.length}>
+              Export Comparison CSV
+            </button>
             <button type="button" className="subtle-button" onClick={handleClearComparison} disabled={compareIds.length === 0}>Clear selection</button>
           </div>
         </div>

@@ -662,6 +662,22 @@ dd {
   border: 1px solid var(--border);
 }
 
+.comparison-export-button {
+  background: #ff5353;
+  color: #ececee;
+  border: 1px solid #2d2d35;
+  box-shadow: 0 0 0 1px rgba(255, 83, 83, 0.08), 0 4px 14px rgba(255, 83, 83, 0.2);
+}
+
+.comparison-export-button:hover:not(:disabled) {
+  background: #ff6969;
+}
+
+.comparison-export-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .danger-button {
   background: #ffffff;
   color: var(--danger);
