@@ -78,3 +78,82 @@ MEMORY_POOL_EXPERIMENTS_V1
   }
 }
 " 0 
+1849
+"exp-1792949922594900784-12" "workload_experiment" "2026-10-25T17:38:42Z" 262144 "first_fit" "variable_size" 0 "5 workload operations" "allocate:64:0;allocate:128:0;allocate:256:0;free:0:1;allocate:96:0;" 0 5 "allocate" 1 64 64 0 1 0.004045 "" "allocate" 2 128 128 64 1 0.001611 "" "allocate" 3 256 256 192 1 0.001121 "" "free" 1 0 0 0 1 0.003606 "" "allocate" 4 96 96 448 1 0.001755 "" 262144 480 480 261664 480 0.119629 0.183105 4 4 0 0.008532 0.002133 0.001683 0.001121 0.004045 0.0037015 0.0039763 1 0 1 1 0 0.003606 0.003606 0.003606 0.003606 0.003606 0.003606 0.003606 1 0 0 0 0.0244588 2 261600 130832 0 0 4 5 4 1 5 0 0.030463 4 64 1 96 1 128 1 256 1 3 544 0 "{
+  \"capacity\": 262144,
+  \"block_size\": 0,
+  \"pool_strategy\": \"first_fit\",
+  \"allocation_mode\": \"variable_size\",
+  \"blocks\": [
+    {\"id\": 1, \"offset\": 0, \"size\": 64, \"requested_size\": 0, \"allocated\": false, \"allocation_id\": 0, \"state\": \"free\"},
+    {\"id\": 2, \"offset\": 64, \"size\": 128, \"requested_size\": 128, \"allocated\": true, \"allocation_id\": 2, \"state\": \"allocated\"},
+    {\"id\": 3, \"offset\": 192, \"size\": 256, \"requested_size\": 256, \"allocated\": true, \"allocation_id\": 3, \"state\": \"allocated\"},
+    {\"id\": 4, \"offset\": 448, \"size\": 96, \"requested_size\": 96, \"allocated\": true, \"allocation_id\": 4, \"state\": \"allocated\"},
+    {\"id\": 5, \"offset\": 544, \"size\": 261600, \"requested_size\": 0, \"allocated\": false, \"allocation_id\": 0, \"state\": \"free\"}
+  ],
+  \"statistics\": {
+    \"allocated_memory\": 480,
+    \"free_memory\": 261664,
+    \"requested_memory\": 480,
+    \"largest_free_block\": 261600,
+    \"free_block_count\": 2,
+    \"memory_utilization\": 0.00183105,
+    \"peak_memory_usage\": 480,
+    \"internal_fragmentation\": 0,
+    \"external_fragmentation\": 0.000244588
+  }
+}
+" 0 
+1850
+"exp-1792949931713307160-13" "workload_experiment" "2026-10-25T17:38:51Z" 262144 "first_fit" "variable_size" 0 "5 workload operations" "allocate:64:0;allocate:128:0;allocate:256:0;free:0:1;allocate:96:0;" 0 5 "allocate" 1 64 64 0 1 0.002964 "" "allocate" 2 128 128 64 1 0.00122 "" "allocate" 3 256 256 192 1 0.000797 "" "free" 1 0 0 0 1 0.002781 "" "allocate" 4 96 96 448 1 0.001279 "" 262144 480 480 261664 480 0.119629 0.183105 4 4 0 0.00626 0.001565 0.0012495 0.000797 0.002964 0.00271125 0.00291345 1 0 1 1 0 0.002781 0.002781 0.002781 0.002781 0.002781 0.002781 0.002781 1 0 0 0 0.0244588 2 261600 130832 0 0 4 5 4 1 5 0 0.021531 4 64 1 96 1 128 1 256 1 3 544 0 "{
+  \"capacity\": 262144,
+  \"block_size\": 0,
+  \"pool_strategy\": \"first_fit\",
+  \"allocation_mode\": \"variable_size\",
+  \"blocks\": [
+    {\"id\": 1, \"offset\": 0, \"size\": 64, \"requested_size\": 0, \"allocated\": false, \"allocation_id\": 0, \"state\": \"free\"},
+    {\"id\": 2, \"offset\": 64, \"size\": 128, \"requested_size\": 128, \"allocated\": true, \"allocation_id\": 2, \"state\": \"allocated\"},
+    {\"id\": 3, \"offset\": 192, \"size\": 256, \"requested_size\": 256, \"allocated\": true, \"allocation_id\": 3, \"state\": \"allocated\"},
+    {\"id\": 4, \"offset\": 448, \"size\": 96, \"requested_size\": 96, \"allocated\": true, \"allocation_id\": 4, \"state\": \"allocated\"},
+    {\"id\": 5, \"offset\": 544, \"size\": 261600, \"requested_size\": 0, \"allocated\": false, \"allocation_id\": 0, \"state\": \"free\"}
+  ],
+  \"statistics\": {
+    \"allocated_memory\": 480,
+    \"free_memory\": 261664,
+    \"requested_memory\": 480,
+    \"largest_free_block\": 261600,
+    \"free_block_count\": 2,
+    \"memory_utilization\": 0.00183105,
+    \"peak_memory_usage\": 480,
+    \"internal_fragmentation\": 0,
+    \"external_fragmentation\": 0.000244588
+  }
+}
+" 0 
+2302
+"exp-1792949934653497797-14" "Seeded random workload" "2026-10-25T17:38:54Z" 262144 "best_fit" "fixed_size" 256 "Seeded random: operations=5, minimum_size_bytes=16, maximum_size_bytes=256, allocation_probability_percent=70, deallocation_probability_percent=30" "allocate:197:1;allocate:197:2;allocate:233:3;allocate:154:4;allocate:82:5;" 42 5 "allocate" 1 197 256 0 1 0.002832 "" "allocate" 2 197 256 256 1 0.001014 "" "allocate" 3 233 256 512 1 0.000766 "" "allocate" 4 154 256 768 1 0.001002 "" "allocate" 5 82 256 1024 1 0.00066 "" 262144 863 1280 260864 1280 0.292969 0.488281 5 5 0 0.006274 0.0012548 0.001002 0.00066 0.002832 0.0024684 0.00275928 1 0 0 0 0 0 0 0 0 0 0 0 0 0 417 48.3198 0 1 260864 260864 0 0 5 5 5 0 5 0 0.019807 4 82 1 154 1 197 2 233 1 5 863 1 "exp-1792949934653497797-14" "Seeded random workload" "best_fit" "fixed_size" 5 5 0 0 0 0 0.006274 0 0.002832 0 0 0.019807 0.0012548 0.0024684 0.00275928 1 0 0.488281 1280 0.488281 48.3198 0 260864 1 5 0 "{
+  \"capacity\": 262144,
+  \"block_size\": 256,
+  \"pool_strategy\": \"best_fit\",
+  \"allocation_mode\": \"fixed_size\",
+  \"blocks\": [
+    {\"id\": 1, \"offset\": 0, \"size\": 256, \"requested_size\": 197, \"allocated\": true, \"allocation_id\": 1, \"state\": \"allocated\"},
+    {\"id\": 2, \"offset\": 256, \"size\": 256, \"requested_size\": 197, \"allocated\": true, \"allocation_id\": 2, \"state\": \"allocated\"},
+    {\"id\": 3, \"offset\": 512, \"size\": 256, \"requested_size\": 233, \"allocated\": true, \"allocation_id\": 3, \"state\": \"allocated\"},
+    {\"id\": 4, \"offset\": 768, \"size\": 256, \"requested_size\": 154, \"allocated\": true, \"allocation_id\": 4, \"state\": \"allocated\"},
+    {\"id\": 5, \"offset\": 1024, \"size\": 256, \"requested_size\": 82, \"allocated\": true, \"allocation_id\": 5, \"state\": \"allocated\"},
+    {\"id\": 6, \"offset\": 1280, \"size\": 260864, \"requested_size\": 0, \"allocated\": false, \"allocation_id\": 0, \"state\": \"free\"}
+  ],
+  \"statistics\": {
+    \"allocated_memory\": 1280,
+    \"free_memory\": 260864,
+    \"requested_memory\": 863,
+    \"largest_free_block\": 260864,
+    \"free_block_count\": 1,
+    \"memory_utilization\": 0.00488281,
+    \"peak_memory_usage\": 1280,
+    \"internal_fragmentation\": 417,
+    \"external_fragmentation\": 0
+  }
+}
+" 0 

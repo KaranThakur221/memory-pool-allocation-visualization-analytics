@@ -212,7 +212,7 @@ backend process and is not a multi-process database.
 
 The API supports pool initialization/configuration, manual allocation and
 deallocation, custom workload execution, seeded random workload generation,
-benchmark comparisons, experiment history/detail/comparison, and CSV export.
+benchmark comparisons, experiment history/detail/comparison, and CSV export.+
 The seeded workload editor independently selects First-Fit or Best-Fit and
 fixed-size or variable-size allocation. Fixed-size mode requires a block size
 at least as large as the configured maximum request. The backend records the
