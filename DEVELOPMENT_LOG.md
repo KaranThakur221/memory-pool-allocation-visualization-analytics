@@ -1,5 +1,30 @@
 # Development and Audit Log
 
+## 2026-10-26 — Linux mmap memory provider
+
+**Feature/component:** Memory provider abstraction and Linux mmap integration
+**Changes implemented:** Added a provider interface with the existing heap
+provider as the default and a Linux `mmap()`/`munmap()` provider selected by
+the pool API or dashboard. Mappings use the system page size, retain the
+requested allocator capacity separately from rounded mapped bytes, reject
+`MAP_FAILED`, and never fall back silently to heap allocation. Existing
+First-Fit, Best-Fit, fixed-size, variable-size, splitting, coalescing, and
+offset-based visualization behavior remain in `MemoryPool`. Pool JSON and
+statistics now expose provider, mapped bytes, mapping count, and unmapping
+count.
+**Files added/modified:** `src/memory_provider.h`, `src/memory_provider.cpp`,
+`src/memory_pool.h`, `src/memory_pool.cpp`, `src/api_server.cpp`,
+`src/experiment_metrics.h`, `CMakeLists.txt`, `tests/allocator_tests.cpp`,
+`frontend/src/App.jsx`, `README.md`.
+**Verification:** CMake build and CTest passed (1/1). The frontend test suite
+passed (16/16), Vite production build passed, and an HTTP smoke test
+initialized a 5,000-byte mmap pool and verified an 8,192-byte page-rounded
+mapping.
+**Known limitation:** Provider metadata is included in live pool state and
+new experiment API responses; the existing binary experiment format remains
+backward-compatible and does not yet persist the provider label separately
+for historical records.
+
 ## 2026-10-25 — Comparative analysis CSV export
 
 **Feature/component:** Final comparison export  

@@ -259,6 +259,7 @@ struct WorkloadSession {
     std::string allocation_mode = "variable_size";
     size_t fixed_block_size = 0;
     size_t capacity = 0;
+    MemoryProviderType provider_type = MemoryProviderType::Heap;
     std::unique_ptr<MemoryPool> pool;
     std::unordered_map<uint64_t, void*> active;
     std::vector<OperationRecord> results;
@@ -334,6 +335,14 @@ MemoryPool::AllocationMode allocation_mode_from_name(const std::string& input) {
         : MemoryPool::AllocationMode::VariableSize;
 }
 
+bool parse_provider(const std::string& input, MemoryProviderType& provider_type) {
+    if (input.empty()) {
+        provider_type = MemoryProviderType::Heap;
+        return true;
+    }
+    return memory_provider_type_from_name(input.c_str(), provider_type);
+}
+
 std::string strategy_to_string(MemoryPool::Strategy strategy) {
     switch (strategy) {
         case MemoryPool::Strategy::BestFit: return "best_fit";
@@ -369,7 +378,9 @@ std::string workload_session_json(const WorkloadSession& session) {
     out << "  \"progress\": " << (session.workload.empty() ? 0.0 : static_cast<double>(session.next_operation) / session.workload.size()) * 100.0 << ",\n";
     out << "  \"configuration\": {\"strategy\": \"" << json_escape(session.strategy)
         << "\", \"allocation_mode\": \"" << json_escape(session.allocation_mode)
-        << "\", \"fixed_block_size\": " << session.fixed_block_size << "},\n";
+        << "\", \"fixed_block_size\": " << session.fixed_block_size
+        << ", \"memory_provider\": \"" << memory_provider_type_name(session.provider_type) << "\"},\n";
+    out << "  \"memory_provider\": \"" << memory_provider_type_name(session.provider_type) << "\",\n";
     out << "  \"results\": [";
     for (size_t i = 0; i < session.results.size(); ++i) {
         if (i > 0) out << ',';
@@ -449,6 +460,7 @@ bool finalize_workload_session(
     record.pool_capacity = session.capacity;
     record.strategy = session.strategy;
     record.allocation_mode = session.allocation_mode;
+    record.memory_provider = memory_provider_type_name(session.provider_type);
     record.fixed_block_size = session.fixed_block_size;
     record.workload_configuration = std::to_string(session.workload.size()) + " workload operations";
     record.operation_sequence = session.results;
@@ -577,7 +589,8 @@ ExperimentRecord run_workload_experiment(
     const std::vector<WorkloadEntry>& workload,
     size_t fixed_block_size,
     uint64_t random_seed,
-    const std::string& experiment_name) {
+    const std::string& experiment_name,
+    MemoryProviderType provider_type = MemoryProviderType::Heap) {
     ExperimentRecord record;
     record.experiment_id = generate_experiment_id();
     record.name = experiment_name.empty() ? "Allocator Experiment " + record.experiment_id : experiment_name;
@@ -586,6 +599,7 @@ ExperimentRecord run_workload_experiment(
     record.strategy = normalize_algorithm_name(strategy_name);
     record.allocation_mode = allocation_mode;
     record.fixed_block_size = allocation_mode == "fixed_size" ? fixed_block_size : 0;
+    record.memory_provider = memory_provider_type_name(provider_type);
     record.random_seed = random_seed;
     record.workload_configuration = std::to_string(workload.size()) + " workload operations";
     std::ostringstream workload_signature;
@@ -598,7 +612,8 @@ ExperimentRecord run_workload_experiment(
         capacity,
         record.fixed_block_size,
         strategy_from_name(record.strategy),
-        allocation_mode_from_name(allocation_mode));
+        allocation_mode_from_name(allocation_mode),
+        provider_type);
     std::unordered_map<uint64_t, void*> active;
     std::unordered_map<uint64_t, size_t> active_requested_sizes;
     std::vector<double> allocation_times_ms;
@@ -849,6 +864,7 @@ std::string experiment_record_to_json(const ExperimentRecord& record) {
     out << "  \"timestamp\": \"" << json_escape(record.timestamp) << "\",\n";
     out << "  \"strategy\": \"" << json_escape(record.strategy) << "\",\n";
     out << "  \"allocation_mode\": \"" << json_escape(record.allocation_mode) << "\",\n";
+    out << "  \"memory_provider\": \"" << json_escape(record.memory_provider.empty() ? "heap" : record.memory_provider) << "\",\n";
     out << "  \"workload_configuration\": \"" << json_escape(record.workload_configuration) << "\",\n";
     out << "  \"workload_signature\": \"" << json_escape(record.workload_signature) << "\",\n";
     out << "  \"random_seed\": " << record.random_seed << ",\n";
@@ -1114,6 +1130,8 @@ int PoolApiServer::run() {
             const size_t capacity = extract_json_size(body, "capacity");
             const size_t fixed_block_size = extract_json_size(body, "fixed_block_size");
             const std::string strategy_name = extract_json_value(body, "strategy");
+            const std::string provider_name = to_lower(extract_json_value(body, "memory_provider"));
+            MemoryProviderType provider_type = MemoryProviderType::Heap;
             constexpr size_t kMaximumPoolCapacity = 64 * 1024 * 1024;
             if (capacity == 0 || capacity > kMaximumPoolCapacity) {
                 success = false;
@@ -1122,6 +1140,10 @@ int PoolApiServer::run() {
             } else if (!is_supported_strategy(strategy_name)) {
                 success = false;
                 response_message = "Unsupported allocation strategy.";
+                response_body = make_json_response(false, response_message, "{}");
+            } else if (!parse_provider(provider_name, provider_type)) {
+                success = false;
+                response_message = "Memory provider must be heap or mmap.";
                 response_body = make_json_response(false, response_message, "{}");
             } else if (strategy_name == "fixed_size" && (fixed_block_size == 0 || fixed_block_size > capacity)) {
                 success = false;
@@ -1132,7 +1154,9 @@ int PoolApiServer::run() {
                     auto replacement = std::make_unique<MemoryPool>(
                         capacity,
                         fixed_block_size == 0 ? 64 : fixed_block_size,
-                        strategy_from_name(strategy_name));
+                        strategy_from_name(strategy_name),
+                        strategy_name == "fixed_size" ? MemoryPool::AllocationMode::FixedSize : MemoryPool::AllocationMode::VariableSize,
+                        provider_type);
                     if (!replacement->is_initialized()) {
                         success = false;
                         response_message = "The allocator could not initialize this pool configuration.";
@@ -1157,6 +1181,8 @@ int PoolApiServer::run() {
             stats_json << "{\n"
                        << "  \"total_capacity\": " << pool->total_capacity() << ",\n"
                        << "  \"free_memory\": " << pool->total_free_memory() << ",\n"
+                       << "  \"mapped_bytes\": " << pool->mapped_bytes() << ",\n"
+                       << "  \"memory_provider\": \"" << pool->provider_name() << "\",\n"
                        << "  \"largest_free_block\": " << pool->largest_free_block() << ",\n"
                        << "  \"active_allocations\": " << pool->active_allocations() << "\n"
                        << "}";
@@ -1209,11 +1235,14 @@ int PoolApiServer::run() {
                 requested_strategy,
                 extract_json_value(body, "allocation_mode"));
             const size_t fixed_block_size = extract_json_size(body, "fixed_block_size");
+            MemoryProviderType provider_type = pool->provider_type();
+            const std::string requested_provider = to_lower(extract_json_value(body, "memory_provider"));
             if (workload.empty()) {
                 response_body = make_json_response(false, "No valid workload operations found", "{}");
             } else if (!is_supported_strategy(requested_strategy.empty() ? "first_fit" : requested_strategy)
                 || (allocation_mode != "fixed_size" && allocation_mode != "variable_size")
-                || (allocation_mode == "fixed_size" && (fixed_block_size == 0 || fixed_block_size > pool->total_capacity()))) {
+                || (allocation_mode == "fixed_size" && (fixed_block_size == 0 || fixed_block_size > pool->total_capacity()))
+                || !parse_provider(requested_provider, provider_type)) {
                 response_body = make_json_response(false, "Invalid allocation strategy, mode, or fixed block size.", "{}");
             } else {
                 std::lock_guard<std::mutex> lock(g_workload_session_mutex);
@@ -1224,12 +1253,14 @@ int PoolApiServer::run() {
                 g_workload_session.allocation_mode = allocation_mode;
                 g_workload_session.fixed_block_size = allocation_mode == "fixed_size" ? fixed_block_size : 0;
                 g_workload_session.capacity = pool->total_capacity();
+                g_workload_session.provider_type = provider_type;
                 g_workload_session.experiment_id = generate_experiment_id();
                 g_workload_session.pool = std::make_unique<MemoryPool>(
                     g_workload_session.capacity,
                     g_workload_session.fixed_block_size,
                     strategy_from_name(strategy_name),
-                    allocation_mode_from_name(allocation_mode));
+                    allocation_mode_from_name(allocation_mode),
+                    provider_type);
                 response_body = make_json_response(true, "Workload session started", workload_session_json(g_workload_session));
             }
         } else if (path == "/api/workload/session/status" && method == "GET") {
@@ -1304,10 +1335,13 @@ int PoolApiServer::run() {
                     requested_strategy,
                     extract_json_value(body, "allocation_mode"));
                 const size_t fixed_block_size = extract_json_size(body, "fixed_block_size");
+                MemoryProviderType provider_type = pool->provider_type();
+                const std::string requested_provider = to_lower(extract_json_value(body, "memory_provider"));
                 if (!is_supported_strategy(requested_strategy)
                     || (allocation_mode != "fixed_size" && allocation_mode != "variable_size")
                     || (allocation_mode == "fixed_size"
-                        && (fixed_block_size == 0 || fixed_block_size > pool->total_capacity()))) {
+                        && (fixed_block_size == 0 || fixed_block_size > pool->total_capacity()))
+                    || !parse_provider(requested_provider, provider_type)) {
                     success = false;
                     response_message = "Invalid allocation strategy or fixed block size.";
                     response_body = make_json_response(false, response_message, "{}");
@@ -1319,7 +1353,8 @@ int PoolApiServer::run() {
                         workload,
                         fixed_block_size,
                         extract_json_id(body, "random_seed"),
-                        "workload_experiment");
+                        "workload_experiment",
+                        provider_type);
                     const bool persisted = persist_experiment(experiment_store, experiment, store_error);
                     if (!persisted) {
                         success = false;
@@ -1331,7 +1366,8 @@ int PoolApiServer::run() {
                         payload << "  \"experiment_id\": \"" << json_escape(experiment.experiment_id) << "\",\n";
                         payload << "  \"configuration\": {\"strategy\": \"" << json_escape(experiment.strategy)
                             << "\", \"allocation_mode\": \"" << json_escape(experiment.allocation_mode)
-                            << "\", \"fixed_block_size\": " << experiment.fixed_block_size << "},\n";
+                            << "\", \"fixed_block_size\": " << experiment.fixed_block_size
+                            << ", \"memory_provider\": \"" << json_escape(experiment.memory_provider) << "\"},\n";
                         payload << "  \"results\": [\n";
                         for (size_t i = 0; i < experiment.operation_sequence.size(); ++i) {
                             payload << operation_record_to_json(experiment.operation_sequence[i]);
@@ -1364,8 +1400,17 @@ int PoolApiServer::run() {
             const std::string strategy_name = to_lower(extract_json_value(body, "strategy"));
             const std::string allocation_mode = to_lower(extract_json_value(body, "allocation_mode"));
             const size_t fixed_block_size = extract_json_size(body, "fixed_block_size");
+            MemoryProviderType provider_type = pool->provider_type();
+            const std::string requested_provider = to_lower(extract_json_value(body, "memory_provider"));
+            if (!parse_provider(requested_provider, provider_type)) {
+                success = false;
+                response_message = "Memory provider must be heap or mmap.";
+                response_body = make_json_response(false, response_message, "{}");
+            }
             std::vector<WorkloadEntry> workload;
-            if (!valid_seed) {
+            if (!success) {
+                // The provider error response was prepared above.
+            } else if (!valid_seed) {
                 success = false;
                 response_message = "Random seed must be provided as a non-negative integer.";
                 response_body = make_json_response(false, response_message, "{}");
@@ -1392,7 +1437,8 @@ int PoolApiServer::run() {
                     workload,
                     fixed_block_size,
                     random_seed,
-                    "Seeded random workload");
+                    "Seeded random workload",
+                    provider_type);
                 experiment.workload_configuration =
                     "Seeded random: operations=" + std::to_string(operation_count)
                     + ", minimum_size_bytes=" + std::to_string(minimum_size)
@@ -1411,6 +1457,7 @@ int PoolApiServer::run() {
                     payload << "  \"configuration\": {\"strategy\": \"" << json_escape(experiment.strategy)
                         << "\", \"allocation_mode\": \"" << json_escape(experiment.allocation_mode)
                         << "\", \"fixed_block_size\": " << experiment.fixed_block_size
+                        << ", \"memory_provider\": \"" << json_escape(experiment.memory_provider) << "\""
                         << ", \"operation_count\": " << operation_count
                         << ", \"minimum_size\": " << minimum_size
                         << ", \"maximum_size\": " << maximum_size

@@ -9,6 +9,7 @@ include(CTest)
 
 add_library(memory_pool_lib
     src/memory_pool.cpp
+    src/memory_provider.cpp
     src/fixed_size_pool.cpp
     src/variable_size_pool.cpp
     src/first_fit.cpp

@@ -6,6 +6,8 @@
 #include <filesystem>
 #include <iostream>
 #include <random>
+#include <string>
+#include <unistd.h>
 #include <vector>
 
 #include "benchmark.h"
@@ -32,6 +34,24 @@ int main() {
         assert(ptr != nullptr);
         assert(pool.active_allocations() == 1);
         assert(pool.deallocate(ptr));
+    }
+
+    {
+        MemoryPool pool(5000, 64, MemoryPool::Strategy::BestFit,
+                        MemoryPool::AllocationMode::VariableSize,
+                        MemoryProviderType::Mmap);
+        assert(pool.is_initialized());
+        assert(pool.provider_type() == MemoryProviderType::Mmap);
+        assert(std::string(pool.provider_name()) == "mmap");
+        assert(pool.mapped_bytes() >= 5000);
+        assert(pool.mapped_bytes() % static_cast<size_t>(sysconf(_SC_PAGESIZE)) == 0);
+        void* ptr = pool.allocate(128, 7);
+        assert(ptr != nullptr);
+        assert(pool.stats().mapped_bytes == pool.mapped_bytes());
+        assert(pool.deallocate(ptr));
+        pool.reset();
+        assert(pool.is_initialized());
+        assert(pool.stats().active_allocations == 0);
     }
 
     {

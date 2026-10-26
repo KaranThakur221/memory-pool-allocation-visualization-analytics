@@ -106,6 +106,7 @@ struct ExperimentRecord {
     size_t pool_capacity = 0;
     std::string strategy;
     std::string allocation_mode;
+    std::string memory_provider = "heap";
     size_t fixed_block_size = 0;
     std::string workload_configuration;
     std::string workload_signature;

@@ -6,26 +6,40 @@
 #include <sstream>
 
 MemoryPool::MemoryPool(size_t capacity, size_t block_size, Strategy strategy)
+    : MemoryPool(capacity, block_size, strategy,
+                 strategy == Strategy::FixedSize ? AllocationMode::FixedSize : AllocationMode::VariableSize,
+                 MemoryProviderType::Heap) {}
+
+MemoryPool::MemoryPool(size_t capacity, size_t block_size, Strategy strategy, AllocationMode allocation_mode)
+    : MemoryPool(capacity, block_size, strategy, allocation_mode, MemoryProviderType::Heap) {}
+
+MemoryPool::MemoryPool(size_t capacity, size_t block_size, Strategy strategy,
+                       AllocationMode allocation_mode, MemoryProviderType provider_type)
     : capacity_(capacity),
       block_size_(block_size),
       strategy_(strategy),
-      allocation_mode_(strategy == Strategy::FixedSize
-          ? AllocationMode::FixedSize
-          : AllocationMode::VariableSize) {
+      allocation_mode_(allocation_mode),
+      provider_type_(provider_type),
+      provider_(make_memory_provider(provider_type)) {
     initialize();
 }
 
-MemoryPool::MemoryPool(size_t capacity, size_t block_size, Strategy strategy, AllocationMode allocation_mode)
-    : capacity_(capacity),
-      block_size_(block_size),
-      strategy_(strategy),
-      allocation_mode_(allocation_mode) {
-    initialize();
+MemoryPool::~MemoryPool() {
+    if (initialized_ && provider_ != nullptr && provider_->release()) {
+        ++unmapping_count_;
+    }
 }
 
 bool MemoryPool::initialize() {
     if (capacity_ == 0 || (allocation_mode_ == AllocationMode::FixedSize && block_size_ == 0)) {
         return false;
+    }
+    if (initialized_ && provider_ != nullptr) {
+        if (!provider_->release()) {
+            return false;
+        }
+        ++unmapping_count_;
+        initialized_ = false;
     }
 
     successful_allocations_ = 0;
@@ -38,7 +52,11 @@ bool MemoryPool::initialize() {
     next_allocation_id_ = 1;
     next_block_id_ = 1;
 
-    buffer_.assign(capacity_, 0);
+    if (provider_ == nullptr || !provider_->initialize(capacity_)) {
+        initialized_ = false;
+        return false;
+    }
+    ++mapping_count_;
     blocks_.clear();
     free_blocks_.clear();
 
@@ -53,6 +71,9 @@ bool MemoryPool::is_initialized() const {
 }
 
 void MemoryPool::reset() {
+    if (provider_ != nullptr && initialized_ && provider_->release()) {
+        ++unmapping_count_;
+    }
     initialized_ = false;
     successful_allocations_ = 0;
     failed_allocations_ = 0;
@@ -61,14 +82,9 @@ void MemoryPool::reset() {
     coalescing_operations_ = 0;
     block_splitting_operations_ = 0;
     contiguous_memory_failures_ = 0;
-    buffer_.assign(capacity_, 0);
     blocks_.clear();
     free_blocks_.clear();
-    next_allocation_id_ = 1;
-    next_block_id_ = 1;
-    blocks_.push_back({next_block_id_++, 0, capacity_, 0, false, 0, "free"});
-    free_blocks_.push_back(blocks_.front());
-    initialized_ = true;
+    initialize();
 }
 
 AllocationBlock* MemoryPool::find_first_fit(size_t requested_size) {
@@ -201,7 +217,7 @@ void* MemoryPool::allocate(size_t requested_size, uint64_t allocation_id) {
         if (block.allocated) allocated_total += block.size;
     }
     peak_memory_usage_ = std::max(peak_memory_usage_, allocated_total);
-    return buffer_.data() + original_offset;
+    return provider_->data() + original_offset;
 }
 
 bool MemoryPool::deallocate(void* ptr) {
@@ -209,9 +225,12 @@ bool MemoryPool::deallocate(void* ptr) {
         return false;
     }
 
-    const auto start = reinterpret_cast<std::uintptr_t>(buffer_.data());
+    if (!initialized_ || provider_ == nullptr || provider_->data() == nullptr) {
+        return false;
+    }
+    const auto start = reinterpret_cast<std::uintptr_t>(provider_->data());
     const auto address = reinterpret_cast<std::uintptr_t>(ptr);
-    if (address < start || address - start >= buffer_.size()) {
+    if (address < start || address - start >= capacity_) {
         return false;
     }
 
@@ -244,6 +263,7 @@ std::vector<AllocationBlock> MemoryPool::free_blocks() const {
 MemoryStats MemoryPool::stats() const {
     MemoryStats stats;
     stats.total_capacity = capacity_;
+    stats.mapped_bytes = provider_ == nullptr ? 0 : provider_->mapped_bytes();
     stats.free_block_count = 0;
     stats.largest_free_block = 0;
     stats.successful_allocations = successful_allocations_;
@@ -252,6 +272,8 @@ MemoryStats MemoryPool::stats() const {
     stats.contiguous_memory_failures = contiguous_memory_failures_;
     stats.successful_coalescing_operations = coalescing_operations_;
     stats.block_splitting_operations = block_splitting_operations_;
+    stats.mapping_count = mapping_count_;
+    stats.unmapping_count = unmapping_count_;
     size_t allocated_total = 0;
     size_t requested_total = 0;
     size_t free_total = 0;
@@ -348,10 +370,24 @@ size_t MemoryPool::block_size() const {
     return block_size_;
 }
 
+MemoryProviderType MemoryPool::provider_type() const {
+    return provider_type_;
+}
+
+const char* MemoryPool::provider_name() const {
+    return provider_ == nullptr ? memory_provider_type_name(provider_type_) : provider_->name();
+}
+
+size_t MemoryPool::mapped_bytes() const {
+    return provider_ == nullptr ? 0 : provider_->mapped_bytes();
+}
+
 std::string MemoryPool::to_json() const {
     std::ostringstream out;
     out << "{\n";
     out << "  \"capacity\": " << capacity_ << ",\n";
+    out << "  \"mapped_bytes\": " << mapped_bytes() << ",\n";
+    out << "  \"memory_provider\": \"" << provider_name() << "\",\n";
     out << "  \"block_size\": " << block_size_ << ",\n";
     out << "  \"pool_strategy\": \"";
     switch (strategy_) {
@@ -389,7 +425,10 @@ std::string MemoryPool::to_json() const {
     out << "    \"memory_utilization\": " << current_stats.memory_utilization << ",\n";
     out << "    \"peak_memory_usage\": " << current_stats.peak_memory_usage << ",\n";
     out << "    \"internal_fragmentation\": " << current_stats.internal_fragmentation << ",\n";
-    out << "    \"external_fragmentation\": " << current_stats.external_fragmentation << "\n";
+    out << "    \"external_fragmentation\": " << current_stats.external_fragmentation << ",\n";
+    out << "    \"mapped_bytes\": " << current_stats.mapped_bytes << ",\n";
+    out << "    \"mapping_count\": " << current_stats.mapping_count << ",\n";
+    out << "    \"unmapping_count\": " << current_stats.unmapping_count << "\n";
     out << "  }\n";
     out << "}\n";
     return out.str();

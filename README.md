@@ -131,6 +131,26 @@ A successful response contains `"success": true` and the current pool
 state. Then open the Vite URL in a browser. The dashboard should show
 **Connected to allocator backend** and display the live memory pool.
 
+## Memory providers
+
+The allocator keeps the existing heap-backed pool as the default and also
+supports an explicit Linux `mmap` provider. Select **Linux mmap** in the
+dashboard's Memory provider control, or send it in a pool initialization
+request:
+
+```bash
+curl -X POST http://localhost:8080/api/pool/initialize \
+  -H 'Content-Type: application/json' \
+  -d '{"capacity":5000,"strategy":"best_fit","memory_provider":"mmap"}'
+```
+
+The mmap provider uses an anonymous private mapping with read/write
+permissions, rounds the OS mapping to the system page size, reports both
+requested capacity and actual mapped bytes, and releases the mapping with
+`munmap()`. This remains userspace allocation; it does not replace Linux's
+kernel allocator or control memory belonging to other processes. Mapping
+failure is reported rather than silently falling back to the heap provider.
+
 ### 5. Run a production frontend preview
 
 For a production-style local run, build the frontend first:

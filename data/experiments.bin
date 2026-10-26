@@ -1,85 +1,6 @@
 MEMORY_POOL_EXPERIMENTS_V1
-7630
-"exp-1792949330460297465-10" "workload_experiment" "2026-10-25T17:28:50Z" 262144 "first_fit" "variable_size" 0 "40 workload operations" "allocate:197:1;allocate:197:2;allocate:233:3;allocate:154:4;allocate:82:5;allocate:18:6;allocate:181:7;allocate:215:8;free:0:7;allocate:27:9;allocate:196:10;allocate:118:11;allocate:50:12;allocate:143:13;allocate:202:14;allocate:195:15;allocate:196:16;free:0:1;free:0:13;allocate:87:17;allocate:184:18;allocate:145:19;allocate:67:20;allocate:134:21;allocate:176:22;allocate:120:23;allocate:33:24;free:0:14;allocate:255:25;allocate:165:26;allocate:223:27;allocate:214:28;allocate:123:29;allocate:87:30;allocate:103:31;free:0:11;allocate:191:32;allocate:212:33;free:0:24;free:0:16;" 0 40 "allocate" 1 197 200 0 1 0.00305 "" "allocate" 2 197 200 200 1 0.001108 "" "allocate" 3 233 240 400 1 0.000717 "" "allocate" 4 154 160 640 1 0.000875 "" "allocate" 5 82 88 800 1 0.000659 "" "allocate" 6 18 24 888 1 0.00053 "" "allocate" 7 181 184 912 1 0.000553 "" "allocate" 8 215 216 1096 1 0.001208 "" "free" 7 0 0 912 1 0.004021 "" "allocate" 9 27 32 912 1 0.001617 "" "allocate" 10 196 200 1312 1 0.000635 "" "allocate" 11 118 120 944 1 0.001061 "" "allocate" 12 50 56 1512 1 0.000649 "" "allocate" 13 143 144 1568 1 0.000613 "" "allocate" 14 202 208 1712 1 0.000847 "" "allocate" 15 195 200 1920 1 0.000687 "" "allocate" 16 196 200 2120 1 0.00089 "" "free" 1 0 0 0 1 0.006263 "" "free" 13 0 0 1568 1 0.005491 "" "allocate" 17 87 88 0 1 0.002494 "" "allocate" 18 184 184 2320 1 0.001003 "" "allocate" 19 145 152 2504 1 0.000951 "" "allocate" 20 67 72 88 1 0.001928 "" "allocate" 21 134 144 1568 1 0.000664 "" "allocate" 22 176 176 2656 1 0.000883 "" "allocate" 23 120 120 2832 1 0.000812 "" "allocate" 24 33 40 160 1 0.00057 "" "free" 14 0 0 1712 1 0.007321 "" "allocate" 25 255 256 2952 1 0.002649 "" "allocate" 26 165 168 1712 1 0.0108 "" "allocate" 27 223 224 3208 1 0.000837 "" "allocate" 28 214 216 3432 1 0.000751 "" "allocate" 29 123 128 3648 1 0.000742 "" "allocate" 30 87 88 3776 1 0.000845 "" "allocate" 31 103 104 3864 1 0.000847 "" "free" 11 0 0 944 1 0.00883 "" "allocate" 32 191 192 3968 1 0.000973 "" "allocate" 33 212 216 4160 1 0.002875 "" "free" 24 0 0 160 1 0.008947 "" "free" 16 0 0 2120 1 0.009104 "" 262144 3853 3944 258200 4184 0.879745 1.59607 33 33 0 0.046323 0.00140373 0.000847 0.00053 0.0108 0.002945 0.00832 1 0 7 7 0 0.049977 0.00713957 0.007321 0.004021 0.009104 0.0090569 0.00909458 1 0 91 2.3618 0.167312 5 257768 51640 0 1 31 40 33 7 40 0 0.183877 30 18 1 27 1 33 1 50 1 67 1 82 1 87 2 103 1 118 1 120 1 123 1 134 1 143 1 145 1 154 1 165 1 176 1 181 1 184 1 191 1 195 1 196 2 197 2 202 1 212 1 214 1 215 1 223 1 233 1 255 1 28 4923 0 "{
-  \"capacity\": 262144,
-  \"block_size\": 0,
-  \"pool_strategy\": \"first_fit\",
-  \"allocation_mode\": \"variable_size\",
-  \"blocks\": [
-    {\"id\": 1, \"offset\": 0, \"size\": 88, \"requested_size\": 87, \"allocated\": true, \"allocation_id\": 17, \"state\": \"allocated\"},
-    {\"id\": 18, \"offset\": 88, \"size\": 72, \"requested_size\": 67, \"allocated\": true, \"allocation_id\": 20, \"state\": \"allocated\"},
-    {\"id\": 21, \"offset\": 160, \"size\": 40, \"requested_size\": 0, \"allocated\": false, \"allocation_id\": 0, \"state\": \"free\"},
-    {\"id\": 2, \"offset\": 200, \"size\": 200, \"requested_size\": 197, \"allocated\": true, \"allocation_id\": 2, \"state\": \"allocated\"},
-    {\"id\": 3, \"offset\": 400, \"size\": 240, \"requested_size\": 233, \"allocated\": true, \"allocation_id\": 3, \"state\": \"allocated\"},
-    {\"id\": 4, \"offset\": 640, \"size\": 160, \"requested_size\": 154, \"allocated\": true, \"allocation_id\": 4, \"state\": \"allocated\"},
-    {\"id\": 5, \"offset\": 800, \"size\": 88, \"requested_size\": 82, \"allocated\": true, \"allocation_id\": 5, \"state\": \"allocated\"},
-    {\"id\": 6, \"offset\": 888, \"size\": 24, \"requested_size\": 18, \"allocated\": true, \"allocation_id\": 6, \"state\": \"allocated\"},
-    {\"id\": 7, \"offset\": 912, \"size\": 32, \"requested_size\": 27, \"allocated\": true, \"allocation_id\": 9, \"state\": \"allocated\"},
-    {\"id\": 10, \"offset\": 944, \"size\": 152, \"requested_size\": 0, \"allocated\": false, \"allocation_id\": 0, \"state\": \"free\"},
-    {\"id\": 8, \"offset\": 1096, \"size\": 216, \"requested_size\": 215, \"allocated\": true, \"allocation_id\": 8, \"state\": \"allocated\"},
-    {\"id\": 9, \"offset\": 1312, \"size\": 200, \"requested_size\": 196, \"allocated\": true, \"allocation_id\": 10, \"state\": \"allocated\"},
-    {\"id\": 11, \"offset\": 1512, \"size\": 56, \"requested_size\": 50, \"allocated\": true, \"allocation_id\": 12, \"state\": \"allocated\"},
-    {\"id\": 13, \"offset\": 1568, \"size\": 144, \"requested_size\": 134, \"allocated\": true, \"allocation_id\": 21, \"state\": \"allocated\"},
-    {\"id\": 14, \"offset\": 1712, \"size\": 168, \"requested_size\": 165, \"allocated\": true, \"allocation_id\": 26, \"state\": \"allocated\"},
-    {\"id\": 25, \"offset\": 1880, \"size\": 40, \"requested_size\": 0, \"allocated\": false, \"allocation_id\": 0, \"state\": \"free\"},
-    {\"id\": 15, \"offset\": 1920, \"size\": 200, \"requested_size\": 195, \"allocated\": true, \"allocation_id\": 15, \"state\": \"allocated\"},
-    {\"id\": 16, \"offset\": 2120, \"size\": 200, \"requested_size\": 0, \"allocated\": false, \"allocation_id\": 0, \"state\": \"free\"},
-    {\"id\": 17, \"offset\": 2320, \"size\": 184, \"requested_size\": 184, \"allocated\": true, \"allocation_id\": 18, \"state\": \"allocated\"},
-    {\"id\": 19, \"offset\": 2504, \"size\": 152, \"requested_size\": 145, \"allocated\": true, \"allocation_id\": 19, \"state\": \"allocated\"},
-    {\"id\": 20, \"offset\": 2656, \"size\": 176, \"requested_size\": 176, \"allocated\": true, \"allocation_id\": 22, \"state\": \"allocated\"},
-    {\"id\": 22, \"offset\": 2832, \"size\": 120, \"requested_size\": 120, \"allocated\": true, \"allocation_id\": 23, \"state\": \"allocated\"},
-    {\"id\": 23, \"offset\": 2952, \"size\": 256, \"requested_size\": 255, \"allocated\": true, \"allocation_id\": 25, \"state\": \"allocated\"},
-    {\"id\": 24, \"offset\": 3208, \"size\": 224, \"requested_size\": 223, \"allocated\": true, \"allocation_id\": 27, \"state\": \"allocated\"},
-    {\"id\": 26, \"offset\": 3432, \"size\": 216, \"requested_size\": 214, \"allocated\": true, \"allocation_id\": 28, \"state\": \"allocated\"},
-    {\"id\": 27, \"offset\": 3648, \"size\": 128, \"requested_size\": 123, \"allocated\": true, \"allocation_id\": 29, \"state\": \"allocated\"},
-    {\"id\": 28, \"offset\": 3776, \"size\": 88, \"requested_size\": 87, \"allocated\": true, \"allocation_id\": 30, \"state\": \"allocated\"},
-    {\"id\": 29, \"offset\": 3864, \"size\": 104, \"requested_size\": 103, \"allocated\": true, \"allocation_id\": 31, \"state\": \"allocated\"},
-    {\"id\": 30, \"offset\": 3968, \"size\": 192, \"requested_size\": 191, \"allocated\": true, \"allocation_id\": 32, \"state\": \"allocated\"},
-    {\"id\": 31, \"offset\": 4160, \"size\": 216, \"requested_size\": 212, \"allocated\": true, \"allocation_id\": 33, \"state\": \"allocated\"},
-    {\"id\": 32, \"offset\": 4376, \"size\": 257768, \"requested_size\": 0, \"allocated\": false, \"allocation_id\": 0, \"state\": \"free\"}
-  ],
-  \"statistics\": {
-    \"allocated_memory\": 3944,
-    \"free_memory\": 258200,
-    \"requested_memory\": 3853,
-    \"largest_free_block\": 257768,
-    \"free_block_count\": 5,
-    \"memory_utilization\": 0.0150452,
-    \"peak_memory_usage\": 4184,
-    \"internal_fragmentation\": 91,
-    \"external_fragmentation\": 0.00167312
-  }
-}
-" 0 
-2298
-"exp-1792949404441632369-11" "Seeded random workload" "2026-10-25T17:30:04Z" 262144 "first_fit" "variable_size" 0 "Seeded random: operations=5, minimum_size_bytes=16, maximum_size_bytes=256, allocation_probability_percent=70, deallocation_probability_percent=30" "allocate:197:1;allocate:197:2;allocate:233:3;allocate:154:4;allocate:82:5;" 42 5 "allocate" 1 197 200 0 1 0.006061 "" "allocate" 2 197 200 200 1 0.002848 "" "allocate" 3 233 240 400 1 0.002161 "" "allocate" 4 154 160 640 1 0.002651 "" "allocate" 5 82 88 800 1 0.00204 "" 262144 863 888 261256 888 0.223389 0.338745 5 5 0 0.015761 0.0031522 0.002651 0.00204 0.006061 0.0054184 0.00593248 1 0 0 0 0 0 0 0 0 0 0 0 0 0 25 2.89687 0 1 261256 261256 0 0 5 5 5 0 5 0 0.047229 4 82 1 154 1 197 2 233 1 5 863 1 "exp-1792949404441632369-11" "Seeded random workload" "first_fit" "variable_size" 5 5 0 0 0 0 0.015761 0 0.006061 0 0 0.047229 0.0031522 0.0054184 0.00593248 1 0 0.338745 888 0.338745 2.89687 0 261256 1 5 0 "{
-  \"capacity\": 262144,
-  \"block_size\": 0,
-  \"pool_strategy\": \"first_fit\",
-  \"allocation_mode\": \"variable_size\",
-  \"blocks\": [
-    {\"id\": 1, \"offset\": 0, \"size\": 200, \"requested_size\": 197, \"allocated\": true, \"allocation_id\": 1, \"state\": \"allocated\"},
-    {\"id\": 2, \"offset\": 200, \"size\": 200, \"requested_size\": 197, \"allocated\": true, \"allocation_id\": 2, \"state\": \"allocated\"},
-    {\"id\": 3, \"offset\": 400, \"size\": 240, \"requested_size\": 233, \"allocated\": true, \"allocation_id\": 3, \"state\": \"allocated\"},
-    {\"id\": 4, \"offset\": 640, \"size\": 160, \"requested_size\": 154, \"allocated\": true, \"allocation_id\": 4, \"state\": \"allocated\"},
-    {\"id\": 5, \"offset\": 800, \"size\": 88, \"requested_size\": 82, \"allocated\": true, \"allocation_id\": 5, \"state\": \"allocated\"},
-    {\"id\": 6, \"offset\": 888, \"size\": 261256, \"requested_size\": 0, \"allocated\": false, \"allocation_id\": 0, \"state\": \"free\"}
-  ],
-  \"statistics\": {
-    \"allocated_memory\": 888,
-    \"free_memory\": 261256,
-    \"requested_memory\": 863,
-    \"largest_free_block\": 261256,
-    \"free_block_count\": 1,
-    \"memory_utilization\": 0.00338745,
-    \"peak_memory_usage\": 888,
-    \"internal_fragmentation\": 25,
-    \"external_fragmentation\": 0
-  }
-}
-" 0 
-1849
-"exp-1792949922594900784-12" "workload_experiment" "2026-10-25T17:38:42Z" 262144 "first_fit" "variable_size" 0 "5 workload operations" "allocate:64:0;allocate:128:0;allocate:256:0;free:0:1;allocate:96:0;" 0 5 "allocate" 1 64 64 0 1 0.004045 "" "allocate" 2 128 128 64 1 0.001611 "" "allocate" 3 256 256 192 1 0.001121 "" "free" 1 0 0 0 1 0.003606 "" "allocate" 4 96 96 448 1 0.001755 "" 262144 480 480 261664 480 0.119629 0.183105 4 4 0 0.008532 0.002133 0.001683 0.001121 0.004045 0.0037015 0.0039763 1 0 1 1 0 0.003606 0.003606 0.003606 0.003606 0.003606 0.003606 0.003606 1 0 0 0 0.0244588 2 261600 130832 0 0 4 5 4 1 5 0 0.030463 4 64 1 96 1 128 1 256 1 3 544 0 "{
+1850
+"exp-1793004512932890765-0" "workload_experiment" "2026-10-26T08:48:32Z" 262144 "first_fit" "variable_size" 0 "5 workload operations" "allocate:64:0;allocate:128:0;allocate:256:0;free:0:1;allocate:96:0;" 0 5 "allocate" 1 64 64 0 1 0.004214 "" "allocate" 2 128 128 64 1 0.001541 "" "allocate" 3 256 256 192 1 0.001149 "" "free" 1 0 0 0 1 0.004253 "" "allocate" 4 96 96 448 1 0.001782 "" 262144 480 480 261664 480 0.119629 0.183105 4 4 0 0.008686 0.0021715 0.0016615 0.001149 0.004214 0.0038492 0.00414104 1 0 1 1 0 0.004253 0.004253 0.004253 0.004253 0.004253 0.004253 0.004253 1 0 0 0 0.0244588 2 261600 130832 0 0 4 5 4 1 5 0 0.03054 4 64 1 96 1 128 1 256 1 3 544 0 "{
   \"capacity\": 262144,
   \"block_size\": 0,
   \"pool_strategy\": \"first_fit\",
@@ -105,7 +26,7 @@ MEMORY_POOL_EXPERIMENTS_V1
 }
 " 0 
 1850
-"exp-1792949931713307160-13" "workload_experiment" "2026-10-25T17:38:51Z" 262144 "first_fit" "variable_size" 0 "5 workload operations" "allocate:64:0;allocate:128:0;allocate:256:0;free:0:1;allocate:96:0;" 0 5 "allocate" 1 64 64 0 1 0.002964 "" "allocate" 2 128 128 64 1 0.00122 "" "allocate" 3 256 256 192 1 0.000797 "" "free" 1 0 0 0 1 0.002781 "" "allocate" 4 96 96 448 1 0.001279 "" 262144 480 480 261664 480 0.119629 0.183105 4 4 0 0.00626 0.001565 0.0012495 0.000797 0.002964 0.00271125 0.00291345 1 0 1 1 0 0.002781 0.002781 0.002781 0.002781 0.002781 0.002781 0.002781 1 0 0 0 0.0244588 2 261600 130832 0 0 4 5 4 1 5 0 0.021531 4 64 1 96 1 128 1 256 1 3 544 0 "{
+"exp-1793004527870199974-1" "workload_experiment" "2026-10-26T08:48:47Z" 262144 "first_fit" "variable_size" 0 "5 workload operations" "allocate:64:0;allocate:128:0;allocate:256:0;free:0:1;allocate:96:0;" 0 5 "allocate" 1 64 64 0 1 0.00777 "" "allocate" 2 128 128 64 1 0.003739 "" "allocate" 3 256 256 192 1 0.002797 "" "free" 1 0 0 0 1 0.008043 "" "allocate" 4 96 96 448 1 0.004349 "" 262144 480 480 261664 480 0.119629 0.183105 4 4 0 0.018655 0.00466375 0.004044 0.002797 0.00777 0.00725685 0.00766737 1 0 1 1 0 0.008043 0.008043 0.008043 0.008043 0.008043 0.008043 0.008043 1 0 0 0 0.0244588 2 261600 130832 0 0 4 5 4 1 5 0 0.064425 4 64 1 96 1 128 1 256 1 3 544 0 "{
   \"capacity\": 262144,
   \"block_size\": 0,
   \"pool_strategy\": \"first_fit\",
@@ -130,8 +51,8 @@ MEMORY_POOL_EXPERIMENTS_V1
   }
 }
 " 0 
-2302
-"exp-1792949934653497797-14" "Seeded random workload" "2026-10-25T17:38:54Z" 262144 "best_fit" "fixed_size" 256 "Seeded random: operations=5, minimum_size_bytes=16, maximum_size_bytes=256, allocation_probability_percent=70, deallocation_probability_percent=30" "allocate:197:1;allocate:197:2;allocate:233:3;allocate:154:4;allocate:82:5;" 42 5 "allocate" 1 197 256 0 1 0.002832 "" "allocate" 2 197 256 256 1 0.001014 "" "allocate" 3 233 256 512 1 0.000766 "" "allocate" 4 154 256 768 1 0.001002 "" "allocate" 5 82 256 1024 1 0.00066 "" 262144 863 1280 260864 1280 0.292969 0.488281 5 5 0 0.006274 0.0012548 0.001002 0.00066 0.002832 0.0024684 0.00275928 1 0 0 0 0 0 0 0 0 0 0 0 0 0 417 48.3198 0 1 260864 260864 0 0 5 5 5 0 5 0 0.019807 4 82 1 154 1 197 2 233 1 5 863 1 "exp-1792949934653497797-14" "Seeded random workload" "best_fit" "fixed_size" 5 5 0 0 0 0 0.006274 0 0.002832 0 0 0.019807 0.0012548 0.0024684 0.00275928 1 0 0.488281 1280 0.488281 48.3198 0 260864 1 5 0 "{
+2295
+"exp-1793004548649472854-2" "Seeded random workload" "2026-10-26T08:49:08Z" 262144 "best_fit" "fixed_size" 256 "Seeded random: operations=5, minimum_size_bytes=16, maximum_size_bytes=256, allocation_probability_percent=70, deallocation_probability_percent=30" "allocate:197:1;allocate:197:2;allocate:233:3;allocate:154:4;allocate:82:5;" 42 5 "allocate" 1 197 256 0 1 0.007005 "" "allocate" 2 197 256 256 1 0.003716 "" "allocate" 3 233 256 512 1 0.002742 "" "allocate" 4 154 256 768 1 0.00379 "" "allocate" 5 82 256 1024 1 0.00254 "" 262144 863 1280 260864 1280 0.292969 0.488281 5 5 0 0.019793 0.0039586 0.003716 0.00254 0.007005 0.006362 0.0068764 1 0 0 0 0 0 0 0 0 0 0 0 0 0 417 48.3198 0 1 260864 260864 0 0 5 5 5 0 5 0 0.060025 4 82 1 154 1 197 2 233 1 5 863 1 "exp-1793004548649472854-2" "Seeded random workload" "best_fit" "fixed_size" 5 5 0 0 0 0 0.019793 0 0.007005 0 0 0.060025 0.0039586 0.006362 0.0068764 1 0 0.488281 1280 0.488281 48.3198 0 260864 1 5 0 "{
   \"capacity\": 262144,
   \"block_size\": 256,
   \"pool_strategy\": \"best_fit\",
@@ -153,6 +74,33 @@ MEMORY_POOL_EXPERIMENTS_V1
     \"memory_utilization\": 0.00488281,
     \"peak_memory_usage\": 1280,
     \"internal_fragmentation\": 417,
+    \"external_fragmentation\": 0
+  }
+}
+" 0 
+1961
+"exp-1793004550875685015-3" "workload_experiment" "2026-10-26T08:49:10Z" 262144 "best_fit" "variable_size" 0 "5 workload operations" "allocate:197:1;allocate:197:2;allocate:233:3;allocate:154:4;allocate:82:5;" 0 5 "allocate" 1 197 200 0 1 0.007591 "" "allocate" 2 197 200 200 1 0.003687 "" "allocate" 3 233 240 400 1 0.002735 "" "allocate" 4 154 160 640 1 0.003441 "" "allocate" 5 82 88 800 1 0.002409 "" 262144 863 888 261256 888 0.223389 0.338745 5 5 0 0.019863 0.0039726 0.003441 0.002409 0.007591 0.0068102 0.00743484 1 0 0 0 0 0 0 0 0 0 0 0 0 0 25 2.89687 0 1 261256 261256 0 0 5 5 5 0 5 0 0.056404 4 82 1 154 1 197 2 233 1 5 863 0 "{
+  \"capacity\": 262144,
+  \"block_size\": 0,
+  \"pool_strategy\": \"best_fit\",
+  \"allocation_mode\": \"variable_size\",
+  \"blocks\": [
+    {\"id\": 1, \"offset\": 0, \"size\": 200, \"requested_size\": 197, \"allocated\": true, \"allocation_id\": 1, \"state\": \"allocated\"},
+    {\"id\": 2, \"offset\": 200, \"size\": 200, \"requested_size\": 197, \"allocated\": true, \"allocation_id\": 2, \"state\": \"allocated\"},
+    {\"id\": 3, \"offset\": 400, \"size\": 240, \"requested_size\": 233, \"allocated\": true, \"allocation_id\": 3, \"state\": \"allocated\"},
+    {\"id\": 4, \"offset\": 640, \"size\": 160, \"requested_size\": 154, \"allocated\": true, \"allocation_id\": 4, \"state\": \"allocated\"},
+    {\"id\": 5, \"offset\": 800, \"size\": 88, \"requested_size\": 82, \"allocated\": true, \"allocation_id\": 5, \"state\": \"allocated\"},
+    {\"id\": 6, \"offset\": 888, \"size\": 261256, \"requested_size\": 0, \"allocated\": false, \"allocation_id\": 0, \"state\": \"free\"}
+  ],
+  \"statistics\": {
+    \"allocated_memory\": 888,
+    \"free_memory\": 261256,
+    \"requested_memory\": 863,
+    \"largest_free_block\": 261256,
+    \"free_block_count\": 1,
+    \"memory_utilization\": 0.00338745,
+    \"peak_memory_usage\": 888,
+    \"internal_fragmentation\": 25,
     \"external_fragmentation\": 0
   }
 }

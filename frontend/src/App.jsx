@@ -60,6 +60,7 @@ function App() {
   const [poolData, setPoolData] = useState(null);
   const [poolCapacity, setPoolCapacity] = useState(262144);
   const [poolStrategy, setPoolStrategy] = useState('first_fit');
+  const [memoryProvider, setMemoryProvider] = useState('heap');
   const [fixedBlockSize, setFixedBlockSize] = useState(64);
   const [workloadText, setWorkloadText] = useState(JSON.stringify(SAMPLE_WORKLOAD, null, 2));
   const [allocationSize, setAllocationSize] = useState(64);
@@ -133,6 +134,7 @@ function App() {
       if (!configurationInitialized.current) {
         setPoolCapacity(nextPool.capacity);
         setPoolStrategy(nextPool.pool_strategy || 'first_fit');
+        setMemoryProvider(nextPool.memory_provider || 'heap');
         setFixedBlockSize(nextPool.block_size || 64);
         configurationInitialized.current = true;
       }
@@ -309,6 +311,7 @@ function App() {
       capacity: Number(poolCapacity),
       strategy: poolStrategy,
       fixed_block_size: Number(fixedBlockSize),
+      memory_provider: memoryProvider,
     });
     if (result?.success) {
       setStatusMessage('Pool initialized with the selected configuration.');
@@ -788,6 +791,13 @@ function App() {
             <option value="fixed_size">Fixed-size</option>
           </select>
         </label>
+        <label>
+          Memory provider
+          <select value={memoryProvider} onChange={(event) => setMemoryProvider(event.target.value)}>
+            <option value="heap">Heap</option>
+            <option value="mmap">Linux mmap</option>
+          </select>
+        </label>
         {poolStrategy === 'fixed_size' && (
           <label>
             Fixed block size (bytes)
@@ -812,6 +822,14 @@ function App() {
         <div className="metric-card">
           <span className="metric-label">Total capacity</span>
           <strong>{formatNumber(poolData?.capacity, 0)}</strong>
+        </div>
+        <div className="metric-card">
+          <span className="metric-label">Memory provider</span>
+          <strong>{poolData?.memory_provider ?? '—'}</strong>
+        </div>
+        <div className="metric-card">
+          <span className="metric-label">Mapped bytes</span>
+          <strong>{formatNumber(poolData?.mapped_bytes ?? poolData?.statistics?.mapped_bytes, 0)}</strong>
         </div>
         <div className="metric-card">
           <span className="metric-label">Free memory</span>

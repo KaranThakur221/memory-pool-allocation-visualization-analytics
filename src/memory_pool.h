@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "memory_provider.h"
+
 struct AllocationBlock {
     uint64_t block_id = 0;
     size_t offset = 0;
@@ -17,6 +19,7 @@ struct AllocationBlock {
 
 struct MemoryStats {
     size_t total_capacity = 0;
+    size_t mapped_bytes = 0;
     size_t allocated_memory = 0;
     size_t free_memory = 0;
     size_t requested_memory = 0;
@@ -39,6 +42,8 @@ struct MemoryStats {
     size_t contiguous_memory_failures = 0;
     size_t successful_coalescing_operations = 0;
     size_t block_splitting_operations = 0;
+    size_t mapping_count = 0;
+    size_t unmapping_count = 0;
 };
 
 class MemoryPool {
@@ -57,7 +62,8 @@ public:
 
     MemoryPool(size_t capacity = 1024 * 1024, size_t block_size = 64, Strategy strategy = Strategy::FirstFit);
     MemoryPool(size_t capacity, size_t block_size, Strategy strategy, AllocationMode allocation_mode);
-    ~MemoryPool() = default;
+    MemoryPool(size_t capacity, size_t block_size, Strategy strategy, AllocationMode allocation_mode, MemoryProviderType provider_type);
+    ~MemoryPool();
 
     bool initialize();
     bool is_initialized() const;
@@ -78,6 +84,9 @@ public:
     Strategy strategy() const;
     AllocationMode allocation_mode() const;
     size_t block_size() const;
+    MemoryProviderType provider_type() const;
+    const char* provider_name() const;
+    size_t mapped_bytes() const;
 
 private:
     AllocationBlock* find_candidate(size_t requested_size);
@@ -86,7 +95,7 @@ private:
     void merge_adjacent_free_blocks();
     void refresh_free_list();
 
-    std::vector<uint8_t> buffer_;
+    std::unique_ptr<MemoryProvider> provider_;
     std::vector<AllocationBlock> blocks_;
     std::vector<AllocationBlock> free_blocks_;
     size_t capacity_ = 0;
@@ -103,5 +112,8 @@ private:
     size_t block_splitting_operations_ = 0;
     size_t contiguous_memory_failures_ = 0;
     bool initialized_ = false;
+    MemoryProviderType provider_type_ = MemoryProviderType::Heap;
+    size_t mapping_count_ = 0;
+    size_t unmapping_count_ = 0;
     static constexpr size_t kMinAllocationSize = 16;
 };
